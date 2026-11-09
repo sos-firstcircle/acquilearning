@@ -56,6 +56,8 @@
   .n.ho{background:#F26B3A;border-color:#FF9A6E}
   .n.yl{background:#F5B83D;color:#0B3B45;border-color:#FFD87A}
   .p.yl{background:var(--marigold-soft);border-color:#F3DFAE}
+  .n.new{background:#fff;color:#0B3B45;border-color:#fff}
+  .p.new{border:2px solid var(--teal)}
   .n.sdr{background:#8FD3E0;color:#0B3B45;border-color:#BCE6EE}
   .oc .n{width:138px}
   .oc-col.wide>.n{width:auto}
@@ -177,7 +179,7 @@ const tile = t => `<div class="jt" data-q="${esc((t.term + " " + (t.abbr || "") 
   ${t.abbr ? `<div class="ab">${esc(t.abbr)}</div><b>${esc(t.term)}</b>` : `<div class="ab nm">${esc(t.term)}</div>`}<p>${esc(t.def)}</p>${t.size ? `<span class="sz">${esc(t.size)}</span>` : ""}</div>`;
 function headcount() {
   const members = D.teams.reduce((n, t) => n + (t.columns ? t.columns.reduce((a, c) => a + c.members.length, 0) : t.members.length), 0);
-  const leaders = D.teams.filter(t => t.leader).length, topGun = D.topGun.length;
+  const leaders = new Set(D.teams.filter(t => t.leader).map(t => t.leader[0])).size, topGun = D.topGun.length;
   return `<div class="hc"><div class="main"><strong>${members + leaders + topGun}</strong><span>AM headcount (selling people)</span></div>
     <div><strong>${members}</strong><span>Acquisition Managers</span></div>
     <div><strong>${leaders}</strong><span>Team leaders</span></div>
@@ -219,7 +221,7 @@ if (LMS.requireSignIn()) {
       ${headcount()}
       <p class="lead">Who's who in Acquisition. Browse the org chart, or switch to List to search a name, team (like EXBT 3) or role.</p>
       <div class="bar"><input id="q" type="search" placeholder="Search name, team or role" autocomplete="off"><span class="count" id="count"></span><div class="tabs"><button data-v="chart" aria-pressed="true">Org chart</button><button data-v="list" aria-pressed="false">List</button></div></div>
-      <div id="dir">${build()}</div><div class="chart" id="chart"><div class="ctl"><button id="fs">Full screen</button><button id="zo" title="Zoom out">−</button><button id="zi" title="Zoom in">+</button></div>${chart()}</div>
+      <div id="dir">${build()}</div><div class="chart" id="chart"><div class="ctl"><button id="fs">Full screen</button><button id="zo" title="Zoom out">−</button><button id="zi" title="Zoom in">+</button><span style="align-self:center;font-size:12px;opacity:.85">White = new joiner</span></div>${chart()}</div>
       <p class="none" id="none">No one found. Try a different spelling.</p>
     </div>
     <div class="panel" id="pn-jargon" style="display:none">

@@ -40,16 +40,19 @@ window.DEPT_DIRECTORY = {
       ]},
       { name: "CLO Activation", members: [
         ["Lee Daz", SAM], ["Lay Sawadjan"], ["Jayson Decena"], ["Taro Chida"], ["JC Mores"],
-        ["Angelica Presado"], ["Federico Miralles Jr."], ["Ghirlie Cabalejo"]
+        ["Angelica Presado"], ["Federico Miralles Jr."], ["Ghirlie Cabalejo"], ["Benedict O'yek", AM, "", "new"]
       ]},
       { name: "Specialized Sales Team", members: [
         ["Bea Julongbayan"], ["Ronna Pantaleon"], ["AJ Angustia"], ["Bert Arriesgado"], ["Rutchelle Co-Untian"],
         ["Ed Manangan"], ["Ai Del Monte"], ["Aliza Copper"]
       ]}
     ]},
-    { name: "ESBT", leader: null, members: [
-      ["JV Estrella"], ["Daren Bugat"], ["Mica Bongcarawan"], ["Joshua Aguirre"], ["Lester Beroy"], ["Ohmar Yumol"],
-      ["Jobelle Gulam"], ["Charmaine Abubakar"], ["Mary Gallart"], ["Jan Carillo"]
+    { name: "ESBT 1", leader: ["Jad De Guzman", "Team Leader"], members: [
+      ["Daren Bugat"], ["Mica Bongcarawan"], ["Joshua Aguirre"], ["Jobelle Gulam"], ["Charmaine Abubakar"],
+      ["Mary Gallart"], ["Raymund Estebar", AM, "", "new"]
+    ]},
+    { name: "ESBT 2", leader: ["Jay Ann Perez", "Team Leader"], members: [
+      ["JV Estrella"], ["Lester Beroy"], ["Ohmar Yumol"], ["Jan Carillo"]
     ]},
     { name: "EXBT 1", leader: ["Rox Colegio", "Team Leader"], members: [
       ["Dewi Acabado"], ["Emilyn Cabance"], ["Jherrlyn Talwer"], ["Janica Astillas"], ["Jonalyn Pasaporte"],
@@ -83,8 +86,8 @@ window.DEPT_DIRECTORY = {
       ["Sophia Andrea Bravo"], ["Gavin Soria"], ["DJ Narag"], ["Jay-Jay Silpedes"], ["Lorraine Carlos"],
       ["Maybelle Catibog"], ["Azella Zaragoza"]
     ]},
-    { name: "EXBT 7", leader: ["Leslie Ann Reyes", "Team Leader", "starts Nov 9"], members: [
-      ["Elaine Fantolgo"], ["Jeeboy Fababier"], ["Gilbert Lu"]
+    { name: "EXBT 7", leader: ["Leslie Ann Reyes", "Team Leader"], members: [
+      ["Elaine Fantolgo"], ["Jeeboy Fababier"], ["Gilbert Lu"], ["Jeremiah David Veloria", AM, "", "new"], ["Alyssa Clarisse Moncada", AM, "", "new"]
     ]},
     { name: "EMBT 1", leader: ["Klang Sarrate", "Team Leader"], members: [
       ["Mel Martinez"], ["Jacky Fabiosa"], ["Melanie Lucenas"], ["Zoe Cortez"], ["Abegail Melegrito"],
@@ -94,22 +97,22 @@ window.DEPT_DIRECTORY = {
     { name: "EMBT 2", leader: ["Jico De Dios", "Team Leader"], members: [
       ["Lala Bonifacio"], ["Mico Escañan", ACM], ["Jefferson Pinca"], ["Cheng Brusola"], ["Paolo Arabia"],
       ["Daniel Yabut"], ["Froilan Molina"], ["Mark Santos"], ["Trixie Lopez"], ["Melinda Marientes"],
-      ["Aprille Rose Sugatan"], ["Ian Dabalos"], ["Andrew Sunga"], ["Brylle Kent Bahia"]
+      ["Aprille Rose Sugatan"], ["Ian Dabalos"], ["Andrew Sunga"], ["Brylle Kent Bahia"], ["Alexander Painaga", AM, "", "new"], ["Renell Gatchalian", AM, "", "new"]
     ]},
     { name: "EMBT 3", leader: ["Chot Camacho", "Team Leader"], members: [
       ["Joanne Diaz"], ["Arlene Espenocilla", ACM], ["Dolores Abligos"], ["Rasmiah Serrano"], ["Annette de Leon"],
-      ["Jose Meynard Vincent"], ["Enrico Cabrera"], ["Rafael Crisostomo"], ["Kat Bañas"]
+      ["Jose Meynard Vincent"], ["Enrico Cabrera"], ["Rafael Crisostomo"], ["Kat Bañas"], ["Hyasmin Joy Lascano", AM, "", "new"]
     ]},
     { name: "Region Team 1", leader: ["Blue Aldridge", "Team Leader"], members: [
       ["Ryan Pene", AM, "Davao"], ["Jack Francisco", AM, "Central & North Luzon"], ["Ronell Macanip", AM, "Central & North Luzon"],
       ["Kenjiva Quiano", AM, "South Luzon"], ["Paolo Martinez", AM, "South Luzon"], ["Jerico Rodriguez"],
       ["Romeo Galang"], ["Riz Sorillo"], ["Jerome Limas"], ["Weng Bumanglag"], ["Kell Mina"], ["Mariel Rivera"],
-      ["Lorelee Pinzon"], ["Angelique Gutierrez"], ["Buena Bulosan"]
+      ["Lorelee Pinzon"], ["Angelique Gutierrez"], ["Buena Bulosan"], ["Ralph Maru Aniciete", AM, "", "new"], ["Melissa Ligeralde", AM, "", "new"]
     ]},
     { name: "Region Team 2", leader: ["Charles Gito", "Team Leader"], members: [
       ["Jome Luzon", AM, "Cebu"], ["Paolo Pogoy", AM, "Cebu"], ["Xyzel Cuento", AM, "Cebu"],
       ["Jason Junsan", AM, "West Visayas"], ["Ivy Completo"], ["Ronaldo Monserate Jr."], ["Cherry Alvarado"],
-      ["Jaime Rafael Bayoneta"], ["Giovanni Capawa"]
+      ["Jaime Rafael Bayoneta"], ["Giovanni Capawa"], ["Jazon Pulmano", AM, "", "new"]
     ]}
   ]
 };
