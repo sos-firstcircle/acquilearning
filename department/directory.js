@@ -40,7 +40,7 @@ window.DEPT_DIRECTORY = {
       ]},
       { name: "CLO Activation", members: [
         ["Lee Daz", SAM], ["Lay Sawadjan"], ["Jayson Decena"], ["Taro Chida"], ["JC Mores"],
-        ["Angelica Presado"], ["Federico Miralles Jr."], ["Ghirlie Cabalejo"], ["Benedict O'yek", AM, "", "new"]
+        ["Federico Miralles Jr."], ["Ghirlie Cabalejo"], ["Benedict O'yek", AM, "", "new"]
       ]},
       { name: "Specialized Sales Team", members: [
         ["Bea Julongbayan"], ["Ronna Pantaleon"], ["AJ Angustia"], ["Bert Arriesgado"], ["Rutchelle Co-Untian"],
@@ -55,14 +55,14 @@ window.DEPT_DIRECTORY = {
       ["JV Estrella"], ["Lester Beroy"], ["Ohmar Yumol"], ["Jan Carillo"]
     ]},
     { name: "EXBT 1", leader: ["Rox Colegio", "Team Leader"], members: [
-      ["Dewi Acabado"], ["Emilyn Cabance"], ["Jherrlyn Talwer"], ["Janica Astillas"], ["Jonalyn Pasaporte"],
-      ["Catherine Barrios"], ["Ramm Vonn Dela Cruz"], ["AJ Forcadilla"], ["Ivan Paderna"], ["Chris Casala"],
+      ["Dewi Acabado"], ["Jherrlyn Talwer"], ["Janica Astillas"], ["Jonalyn Pasaporte"],
+      ["Catherine Barrios"], ["Ram Vonn Dela Cruz"], ["AJ Forcadilla"], ["Chris Casala"],
       ["Danielle Eniorga"], ["Lee Carl Acevedo"], ["Ralph Gabinete"], ["Milvin Bitara"], ["Mike Baluarte"], ["Jhoana Akut"]
     ]},
     { name: "EXBT 2", leader: ["Jad De Guzman", "Team Leader"], members: [
       ["Ann Latorre", SAM], ["Kevin Lopez", SAM], ["Jhe-ann Arrogante"], ["Sean Esplana"], ["John Mortel"],
       ["Leah Cañaberal"], ["Ruth Macalalad"], ["Aika Bernal"], ["GP Gotiangco"], ["Jelan Batas"], ["Caleb Adajar"],
-      ["Ravy Manansala"], ["Mathew Landig"], ["Princess Regalario"], ["Ethan Hong"], ["Pearl Sunga"]
+      ["Ravy Manansala"], ["Mathew Landig"], ["Princess Regalario"], ["Pearl Sunga"]
     ]},
     { name: "EXBT 3", leader: ["Jay Ann Perez", "Team Leader"], members: [
       ["Yel Del Rosario", SAM], ["Danica San Juan", ACM], ["Lordwin Florendo"], ["Jessa Monroy"], ["Susan Unida"],
@@ -72,13 +72,13 @@ window.DEPT_DIRECTORY = {
     ]},
     { name: "EXBT 4", leader: ["Chuck Alvarez", "Team Leader"], members: [
       ["Barcy Castro"], ["Miggy Lukban", ACM], ["Michael Griño"], ["Loren Lopez"], ["Cell Dela Cruz"],
-      ["Mary Gammad"], ["Jomic David"], ["Maria Gascon"], ["Rica Mahinay"], ["DJ Amameo"], ["Rosanne Garcia"],
+      ["Mary Gammad"], ["Jomic David"], ["DJ Amameo"], ["Rosanne Garcia"],
       ["Grace Belarmino"], ["Krismel Lat-Mallare"], ["Jhanna Morales"], ["Mary Ann Mendoza"], ["Jenny Longos"],
       ["Joanne Karen Rico"]
     ]},
     { name: "EXBT 5", leader: ["Brian De Torres", "Team Leader"], members: [
-      ["Joy Custodio"], ["Keith Santiago"], ["Emerson Yamat"], ["Shena Rivera"], ["Leslie De Los Angeles"],
-      ["Irish Pamintuan"], ["Shenan Tominez"], ["Marites Cuario"], ["Marianne Javier"], ["Lovely Castro"],
+      ["Joy Custodio"], ["Keith Santiago"], ["Shena Rivera"], ["Leslie De Los Angeles"],
+      ["Shenan Tominez"], ["Marites Cuario"], ["Marianne Javier"], ["Lovely Castro"],
       ["Rachel Bolaños"], ["Joana Jayme"], ["Cristina Articona"]
     ]},
     { name: "EXBT 6", leader: ["Aly Abetria", "Team Leader"], members: [
@@ -95,17 +95,17 @@ window.DEPT_DIRECTORY = {
       ["Kristhine Maglana"], ["Andrea Buenafe"]
     ]},
     { name: "EMBT 2", leader: ["Jico De Dios", "Team Leader"], members: [
-      ["Lala Bonifacio"], ["Mico Escañan", ACM], ["Jefferson Pinca"], ["Cheng Brusola"], ["Paolo Arabia"],
-      ["Daniel Yabut"], ["Froilan Molina"], ["Mark Santos"], ["Trixie Lopez"], ["Melinda Marientes"],
+      ["Laalaa Bonifacio"], ["Mico Escañan", ACM], ["Jefferson Pinca"], ["Cheng Brusola"], 
+      ["Daniel Yabut"], ["Mark Santos"], ["Melinda Marientes"],
       ["Aprille Rose Sugatan"], ["Ian Dabalos"], ["Andrew Sunga"], ["Brylle Kent Bahia"], ["Alexander Painaga", AM, "", "new"], ["Renell Gatchalian", AM, "", "new"]
     ]},
     { name: "EMBT 3", leader: ["Chot Camacho", "Team Leader"], members: [
-      ["Joanne Diaz"], ["Arlene Espenocilla", ACM], ["Dolores Abligos"], ["Rasmiah Serrano"], ["Annette de Leon"],
-      ["Jose Meynard Vincent"], ["Enrico Cabrera"], ["Rafael Crisostomo"], ["Kat Bañas"], ["Hyasmin Joy Lascano", AM, "", "new"]
+      ["Joanne Diaz"], ["Arlene Espenocilla", ACM], ["Rasmiah Serrano"], ["Annette de Leon"],
+      ["Vince Jose"], ["Enrico Cabrera"], ["Rafael Crisostomo"], ["Kat Bañas"], ["Hyasmin Joy Lascano", AM, "", "new"]
     ]},
     { name: "Region Team 1", leader: ["Blue Aldridge", "Team Leader"], members: [
       ["Ryan Pene", AM, "Davao"], ["Jack Francisco", AM, "Central & North Luzon"], ["Ronell Macanip", AM, "Central & North Luzon"],
-      ["Kenjiva Quiano", AM, "South Luzon"], ["Paolo Martinez", AM, "South Luzon"], ["Jerico Rodriguez"],
+      ["Kenjiva Quiano", AM, "South Luzon"], ["Paolo Martinez", AM, "South Luzon"], 
       ["Romeo Galang"], ["Riz Sorillo"], ["Jerome Limas"], ["Weng Bumanglag"], ["Kell Mina"], ["Mariel Rivera"],
       ["Lorelee Pinzon"], ["Angelique Gutierrez"], ["Buena Bulosan"], ["Ralph Maru Aniciete", AM, "", "new"], ["Melissa Ligeralde", AM, "", "new"]
     ]},
