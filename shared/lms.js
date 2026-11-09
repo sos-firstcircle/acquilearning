@@ -88,7 +88,7 @@ window.LMS_CONFIG = {
     const body = () => { let token = ""; try { token = sessionStorage.getItem(`${KEY}.idtoken`) || ""; } catch(e){}
       return JSON.stringify({ action, token, payload, email: (currentUser()||{}).email, name: (currentUser()||{}).name }); };   // email/name are used only in the temporary email-list mode
     const once = ms => { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
-      return fetch(C.backendUrl, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: body(), signal: ctl.signal })   // text/plain avoids a CORS preflight, which Apps Script can't answer
+      return fetch(C.backendUrl, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: body(), signal: ctl.signal, keepalive: true })   // text/plain avoids a CORS preflight, which Apps Script can't answer
         .then(r => r.json()).then(j => { clearTimeout(t); return j; }).catch(() => { clearTimeout(t); return null; }); };
     if (!opts.retry) return once(opts.timeout || 30000);
     return new Promise(resolve => {

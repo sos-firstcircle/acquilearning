@@ -49,7 +49,6 @@
   .tasks{list-style:none;margin:0;padding:0}
   .tasks li{border-bottom:1px solid var(--line)}
   .tasks li:last-child{border-bottom:0}
-  .tasks input:disabled{cursor:default;opacity:1}
   .tasks label{display:flex;gap:12px;align-items:flex-start;padding:10px 0;cursor:pointer;font-size:14px;line-height:1.45}
   .tasks input{appearance:none;width:20px;height:20px;border:1.5px solid #9FB1B5;border-radius:6px;flex:none;margin:1px 0 0;display:grid;place-items:center;cursor:pointer;background:#fff}
   .tasks input:checked{background:var(--teal);border-color:var(--teal)}
@@ -195,7 +194,7 @@ function dropdown(sel, P){
   if (sel.empty) return `<div class="drop">${brief}<p class="empty" style="margin-top:${brief?8:0}px">Content coming soon.</p>${catchBtn(sel)}</div>`;
   const taskLi = t => {
     const isDone = P[t.id] && P[t.id].status === "done";
-    return `<li><label><input type="checkbox" data-task="${t.id}" ${isDone?"checked":""} ${t.href?'disabled title="Opens the link to tick this"':""}>${t.openLabel ? `<span class="kind">${esc(t.openLabel)}</span>` : ""}<span>${esc(t.label)}</span>
+    return `<li><label><input type="checkbox" data-task="${t.id}" ${isDone?"checked":""}>${t.openLabel ? `<span class="kind">${esc(t.openLabel)}</span>` : ""}<span>${esc(t.label)}</span>
       ${t.href ? `<a class="open" href="${esc(t.href)}" ${/^https?:/.test(t.href)?'target="_blank" rel="noopener"':""} data-open="${t.id}">Open</a>` : ""}</label></li>`;
   };
   const tasks = sel.tasks.map(taskLi).join("");
@@ -343,11 +342,7 @@ document.addEventListener("click", e => {
     advance(); return; }
   const s = e.target.closest("[data-submit]"); if (s){ LMS.complete(s.dataset.submit); advance(); return; }
   const o = e.target.closest("[data-open]");
-  if (o) {   // opening the link/demo is what ticks a task (the checkbox itself is locked)
-    const id = o.dataset.open, p = LMS.complete(id), blank = o.target === "_blank";
-    if (blank) { Promise.resolve(p).finally(() => advance()); advance(); }
-    else if (!e.ctrlKey && !e.metaKey && !e.shiftKey && e.button === 0) { e.preventDefault(); const go = () => { location.href = o.href; }; Promise.race([Promise.resolve(p), new Promise(r => setTimeout(r, 1500))]).then(go, go); }
-  }
+  if (o) LMS.start(o.dataset.open);
 });
 document.addEventListener("change", e => {
   const t = e.target.closest("[data-task]"); if (!t) return;
@@ -361,6 +356,7 @@ function advance(){
   if (was && was.status==="complete" && current && current !== before) setTimeout(()=>{ selected = current; render(); }, 900);
 }
 
+window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
 if (LMS.requireSignIn()) { renderSide("dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); }
 </script>
 </body>
