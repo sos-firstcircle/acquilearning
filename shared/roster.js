@@ -31,6 +31,19 @@ window.LMS_ROSTER = {
     ],
     "000002": [   // existing AMs: no 10-day path, just the simulations and practice exams (existing/sections.js); can retake
       "acquisitiongroup@firstcircle.com"
+    ],
+    "110926": [   // first real onboarding batch: starts Nov 9, 2026 (standard 10-day path, one attempt per exam)
+      "benedict.oyek@firstcircle.com",
+      "alexander.painaga@firstcircle.com",
+      "renell.gatchalian@firstcircle.com",
+      "raymund.estebar@firstcircle.com",
+      "ralph.aniciete@firstcircle.com",
+      "melissa.ligeralde@firstcircle.com",
+      "jazon.pulmano@firstcircle.com",
+      "hyasmin.lascano@firstcircle.com",
+      "leslie.reyes@firstcircle.com",
+      "jeremiah.veloria@firstcircle.com",
+      "alyssa.moncada@firstcircle.com"
     ]
   }
 };
