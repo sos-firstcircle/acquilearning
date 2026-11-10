@@ -1334,16 +1334,22 @@ render();
         sel = id;
         ids.forEach(function(x){ document.getElementById(x).classList.toggle("on", x === id); });
         var d = document.getElementById("exdec"); d.disabled = false; d.style.opacity = 1;
-        document.getElementById("exmsg").innerHTML = '<div class="msg" style="color:#456">Press Submit to confirm your decision.</div>';
+        var rs = document.getElementById("exreason");   /* "Do not proceed" needs a reason (not scored) */
+        if (id === "exstop" && !rs) { rs = document.createElement("textarea"); rs.id = "exreason"; rs.placeholder = "Why are you not proceeding? (required)"; rs.style.cssText = "width:100%;height:58px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:13px;outline:none;resize:none"; d.parentNode.insertBefore(rs, d); }
+        if (rs) rs.style.display = id === "exstop" ? "block" : "none";
+        document.getElementById("exmsg").innerHTML = '<div class="msg" style="color:#456">' + (id === "exstop" ? "Write your reason, then press Submit." : "Press Submit to confirm your decision.") + '</div>';
       }; });
       document.getElementById("exdec").onclick = function(){
         if (!sel || decided) return;
         if (sel === "exskip2") { finishQ(0, "skipped"); return; }
         if (sel === "exstop") {
+          var why = (document.getElementById("exreason") || {}).value || "";
+          if (!why.trim()) { document.getElementById("exmsg").innerHTML = '<div class="msg bad">Please write your reason first. It has no effect on your score.</div>'; return; }
+          var rd = '<div class="bd"><div><span>Your reason: ' + esc(why.trim()) + '</span></div></div>';
           if (t.proceed === false) {
             if (!(flags.visited || {})[t.leadId]) { handle(t, "Look up the lead first before you decide."); return; }
-            finishQ(pointsNow(), hintUsed ? "hint" : "ok");
-          } else finishQ(0, "wrong", "You could have gone ahead with this one. Always search the lead first, then decide.");
+            finishQ(pointsNow(), hintUsed ? "hint" : "ok", "", rd);
+          } else finishQ(0, "wrong", "You could have gone ahead with this one. Always search the lead first, then decide.", rd);
           return;
         }
         decided = true; flags.proceed = true;

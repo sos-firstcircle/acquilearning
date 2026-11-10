@@ -7,8 +7,8 @@
 <link rel="stylesheet" href="slack/slack.css">
 <script src="../shared/lms.js"></script>
 <script>
-  /* Practice: older files that cannot be accepted are already in Downloads; Lorna's real documents appear after she downloads them from the situation panel. */
-  window.SLK_CONFIG = { me: (function(){ try { var u = LMS.user(); return (u && u.name) || "Hanna Test"; } catch (e) { return "Hanna Test"; } })(), files: ["id-blurry", "id-cropped", "proof-noname", "proof-noacct"].sort(function(){ return Math.random() - 0.5; }) };
+  /* Practice: starts in #acquisition_partnerships; Downloads is empty until the learner downloads Lorna's ID and proof from the situation panel. */
+  window.SLK_CONFIG = { me: (function(){ try { var u = LMS.user(); return (u && u.name) || "Hanna Test"; } catch (e) { return "Hanna Test"; } })(), files: [], channel: "acquisition_partnerships" };
 </script>
 </head>
 <body>

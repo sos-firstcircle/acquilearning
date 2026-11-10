@@ -88,3 +88,8 @@ body.has-g #exitbub{right:16px}
 
 #g .dm{background:#f4f4f4;border-radius:4px 12px 12px 12px;padding:10px 12px;font-size:13px;line-height:1.5;margin:0 0 12px}
 .plus.dis{opacity:.4;cursor:not-allowed}
+
+#iv{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:68;align-items:center;justify-content:center;padding:16px}
+#iv .box{background:#fff;border-radius:12px;padding:12px 14px 14px;position:relative;max-width:96vw;max-height:94vh;overflow:auto}#iv .t{font-weight:700;margin-bottom:8px;font-size:13px}#iv img{display:block;max-width:100%;max-height:78vh;border:1px solid #ddd;border-radius:6px}
+#iv .dx{position:absolute;right:10px;top:4px;border:0;background:none;font-size:24px;cursor:pointer;color:#666}
+body.has-g #iv{right:340px}

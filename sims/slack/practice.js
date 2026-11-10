@@ -9,15 +9,14 @@
   var R = { name: "Lorna Mae Villareal", phone: "0917 111 2233", email: "lorna.villareal@example.com", addr: "45 Mabini St., Brgy. San Roque, Antipolo City, Rizal", tin: "123-456-789-000", bank: "Sample National Bank", accno: "0123 4567 89", team: "INBOUND" };
   var BAD = { "id-blurry": "the ID is blurry", "id-cropped": "the ID is cut off (no name)", "proof-noname": "the proof has no name", "proof-noacct": "the proof has no account number" };
   var AM = "", started = false, done = false, cmdOk = false, wrongCmds = 0, t0 = 0;
-  SLK.on("command", function(d){ if (!started || done) return; if (d.ok) cmdOk = true; else wrongCmds++; });
-  SLK.on("thread-reply", function(d){ if (started && !done && d.files.length) setTimeout(function(){ finish(); }, 400); });
-
+  SLK.on("command", function(d){ if (!started || done) return; if (d.ok) cmdOk = true; else if (!d.why) wrongCmds++; });
+  
   var layer = document.createElement("div"); layer.id = "res"; document.body.appendChild(layer);
   function intro(){
     layer.style.display = "flex";
     layer.innerHTML = '<div class="box" style="width:560px"><div style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;font-weight:700;color:#616061">Practice · not graded</div><h2 style="margin:4px 0 8px">Register a referrer in Slack</h2>' +
       '<p style="font-size:15px;line-height:1.55;margin:0 0 10px">A new referrer sent you her details and her documents. Register her in Slack, the way you would really do it. Use the commands, the form and the thread in the Slack practice site behind this box. Nothing tells you what to click.</p>' +
-      '<p style="font-size:14px;line-height:1.55;margin:0 0 12px;color:#456">You get points for the command, each field of the form, replying in the thread, and the right documents. Download the documents first, then check them against the do\'s and don\'ts. Sending a document that can\'t be accepted (blurry, cut off, no name, no account number) costs 10 points each. Total: 100 points. Aim for 80 or more.</p>' +
+      '<p style="font-size:14px;line-height:1.55;margin:0 0 12px;color:#456">You get points for the command, each field of the form, replying in the thread, and the right documents. Download her ID and proof first, view them to check that the full name is correct, then register her. Total: 100 points. Aim for 80 or more.</p>' +
       '<div style="background:#f4f8f8;border:1px solid #dde6e6;border-radius:10px;padding:10px 12px;margin:0 0 14px"><div style="font-size:13px;line-height:1.5;color:#345;margin-bottom:8px"><b>Honor code.</b> I will do this practice on my own. I will not ask anyone for help, and I will not share the situation or the answers.</div>' +
       '<label style="font-size:13px;font-weight:700">AM name: <input type="text" id="amn" placeholder="Type your name" autocomplete="off" style="width:100%;margin-top:4px;height:38px;border:1px solid #ccc;border-radius:8px;padding:0 10px;font-size:15px"></label><div style="font-size:11px;color:#616061;margin-top:4px">This is the name you will use in the Slack practice site.</div></div>' +
       '<div style="display:flex;justify-content:space-between;align-items:center"><span>' + (window.SLK_STANDALONE ? "" : '<a href="../dashboard.html" style="font-size:13px;color:#1c6a66">Back to Day 5</a> · <a href="' + NEXT.href + '" style="font-size:13px;color:#1c6a66">' + NEXT.label + ' first</a>') + '</span><button class="gbtn dark" id="amgo">Start</button></div></div>';
@@ -31,20 +30,20 @@
     document.body.classList.add("has-g");
     var sit = document.createElement("div"); sit.id = "sit";
     sit.innerHTML = '<h4>Your situation</h4><div class="m">Hi ' + esc(first) + '! I\'d like to be your referrer 🙌 Here are my details:<br><br><b>Name:</b> ' + R.name + '<br><b>Mobile:</b> ' + R.phone + '<br><b>Email:</b> ' + R.email + '<br><b>Address:</b> ' + R.addr + '<br><b>TIN:</b> ' + R.tin + '<br><b>Bank:</b> ' + R.bank + '<br><b>Account name:</b> ' + R.name + '<br><b>Account number:</b> ' + R.accno + '<br><br>And here are my documents:' +
-      '<div class="doc"><b>ID</b><button data-dl="id-lorna">Download ID</button><button data-dd="id">Do\'s and don\'ts for ID</button></div>' +
-      '<div class="doc"><b>Proof of bank account</b><button data-dl="proof-lorna">Download proof</button><button data-dd="proof">Do\'s and don\'ts for proof</button></div></div>' +
+      '<div class="doc"><b>ID</b><button data-dl="id-lorna">Download ID</button><button data-view="id-lorna" style="display:none">View ID</button><button data-dd="id">Do\'s and don\'ts for ID</button></div>' +
+      '<div class="doc"><b>Proof of bank account</b><button data-dl="proof-lorna">Download proof</button><button data-view="proof-lorna" style="display:none">View proof</button><button data-dd="proof">Do\'s and don\'ts for proof</button></div></div>' +
       '<div class="m sys">Register Lorna as a regular referrer in Slack.</div>';
     document.body.appendChild(sit);
-    sit.querySelectorAll("[data-dl]").forEach(function(b){ b.onclick = function(){ SLK.addFile(b.dataset.dl); b.textContent = "✓ Downloaded"; b.className = "done"; SLK.toast("Saved to your Downloads folder."); }; });
+    sit.querySelectorAll("[data-dl]").forEach(function(b){ b.onclick = function(){ SLK.addFile(b.dataset.dl); b.textContent = "✓ Downloaded"; b.className = "done"; var v = sit.querySelector('[data-view="' + b.dataset.dl + '"]'); if (v) v.style.display = ""; SLK.toast("Saved to your Downloads folder."); }; });
+    sit.querySelectorAll("[data-view]").forEach(function(b){ b.onclick = function(){ SLK.viewFile(b.dataset.view); }; });
     sit.querySelectorAll("[data-dd]").forEach(function(b){ b.onclick = function(){ SLK.openDocs(b.dataset.dd); }; });
     var b = document.createElement("div"); b.id = "exitbub";
-    b.innerHTML = '<span class="live"></span><span>In training</span><button class="fin" id="finbtn">Finish test</button><button id="exitbtn">Exit</button>';
+    b.innerHTML = '<span class="live"></span><span>In training</span><button class="fin" id="finbtn">Done</button><button id="exitbtn">Exit</button>';
     document.body.appendChild(b);
     var mk = function(id, h, p, yes, cb){ var d = document.createElement("div"); d.id = id; d.className = "xdlg"; d.innerHTML = '<div class="box"><h3>' + h + '</h3><p>' + p + '</p><div class="r"><button class="gbtn" data-n>Keep going</button><button class="gbtn dark" data-y>' + yes + '</button></div></div>'; document.body.appendChild(d); d.querySelector("[data-n]").onclick = function(){ d.style.display = "none"; }; d.querySelector("[data-y]").onclick = function(){ d.style.display = "none"; cb(); }; return d; };
-    var fd = mk("findlg", "Finish the test now?", "You will see your result right away. What you have not done yet gets 0 points.", "Finish test", function(){ finish(); });
+    var fd = mk("findlg", "Are you done enrolling?", "You will see your result right away. Anything you have not done yet gets 0 points.", "Yes, I\'m done", function(){ finish(); });
     var ed = mk("exdlg", "Exit training?", "If you exit now, your progress in this practice will be reset and you will have to start again.", "Exit", function(){ if (window.SLK_STANDALONE) location.reload(); else location.href = "../dashboard.html"; });
     $("#finbtn").onclick = function(){ fd.style.display = "flex"; }; $("#exitbtn").onclick = function(){ ed.style.display = "flex"; };
-    SLK.toast("Go to acquisition_partnerships to start.");
   }
 
   function finish(){

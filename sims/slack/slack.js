@@ -32,7 +32,7 @@
     { id: "m1", bot: true, time: "2:40 PM", lines: ["✅ Hello <span class=at>@SalesOps</span>! Requesting to enroll regular referrer.", "Submitted by: <span class=at>@Carla Mendoza</span>", "Name: Rej Santiago", "Email: rej.santiago@example.com", "Team: OUTBOUND", "Please attach ID and proof of bank account in this thread. Thank you!"], replies: "4 replies" },
     { id: "m2", bot: true, time: "6:45 PM", lines: ["✅ Hello <span class=at>@SalesOps</span>! Requesting to enroll regular referrer.", "Submitted by: <span class=at>@Paolo Reyes</span>", "Name: KAREN NAPILI", "Email: karen.napili@example.com", "Team: OUTBOUND", "Please attach ID and proof of bank account in this thread. Thank you!"], replies: "1 reply" }
   ];
-  var cur = "acq-am-onboarding", threadOf = null, replies = [], picked = [];
+  var note = "", cur = CFG.channel || "acq-am-onboarding", threadOf = null, replies = [], picked = [];
 
   /* ---------- page skeleton ---------- */
   document.body.innerHTML =
@@ -48,7 +48,7 @@
     '<div id="fm"><div class="box"><div class="bh"><span>👥 Regular Enrollment Form</span><button id="fx" title="Close">×</button></div><div class="bb" id="fbody"></div><div class="bf"><button class="sbtn" id="fcancel">Cancel</button><button class="sbtn go" id="fsubmit">Submit</button></div></div></div>' +
     '<div id="pk"><div class="box"><div class="bar"><b>Downloads</b><span>Click a file to select it. Click again to unselect.</span></div><div class="list" id="pkl"></div><div class="pv" id="pkv"><span>Select a file to see a preview.</span></div><div class="bt"><span id="pkc"></span><span><button class="sbtn" id="pkcancel">Cancel</button> <button class="sbtn go" id="pkopen" disabled>Open</button></span></div></div></div>' +
     '<div id="docs"><div class="box"><button class="dx" title="Close">×</button><div id="docsb"></div></div></div>' +
-    '<div id="toast"></div>';
+    '<div id="iv"><div class="box"><button class="dx" title="Close">×</button><div class="t" id="ivt"></div><img id="ivi" alt=""></div></div><div id="toast"></div>';
 
   /* ---------- channel ---------- */
   function msgHtml(m){
@@ -62,11 +62,11 @@
     $("#chn").textContent = (PRIV[cur] ? "🔒 " : "# ") + cur;
     document.querySelectorAll("#chs .ch").forEach(function(a){ a.classList.toggle("on", a.dataset.ch === cur); });
     $("#cin").placeholder = "Message " + (PRIV[cur] ? "🔒" : "#") + cur;
-    $("#msgs").innerHTML = cur === "acquisition_partnerships" ? MSGS.map(msgHtml).join("") : '<div style="padding:40px;color:#616061;text-align:center">This channel is empty in the practice site.<br>Open <b>acquisition_partnerships</b>.</div>';
+    $("#msgs").innerHTML = cur === "acquisition_partnerships" ? MSGS.map(msgHtml).join("") : (note ? '<div class="only">👁 Only visible to you</div><div class="msg"><div class="av bot">👥</div><div class="mb"><div class="mh"><b>Regular Referrer Enrollment Form</b> <span class="app">APP</span><span class="t">Just now</span></div><div class="mt">⚠️ ' + note + '</div></div></div>' : "");
     $("#msgs").scrollTop = 1e6;
     document.querySelectorAll("#msgs .rl[data-open]").forEach(function(a){ a.onclick = function(){ openThread(a.dataset.open); }; });
   }
-  document.getElementById("chs").onclick = function(e){ var a = e.target.closest(".ch"); if (!a) return; cur = a.dataset.ch; drawMsgs(); SLK.emit("channel", cur); };
+  document.getElementById("chs").onclick = function(e){ var a = e.target.closest(".ch"); if (!a) return; cur = a.dataset.ch; note = ""; drawMsgs(); SLK.emit("channel", cur); };
   SLK.channel = function(){ return cur; };
 
   /* ---------- composer + slash commands ---------- */
@@ -90,6 +90,10 @@
   function runCmd(c){
     var def = CMDS.filter(function(x){ return x.c === c; })[0];
     $("#cin").value = ""; $("#acmenu").style.display = "none"; acItems = [];
+    if (def && def.ok && cur !== "acquisition_partnerships") {   /* the workflow only works in #acquisition_partnerships */
+      note = "This workflow can't be used in this channel. Please only use /regularnew in #acquisition_partnerships."; drawMsgs();
+      SLK.emit("command", { cmd: c, ok: false, why: "channel" }); return;
+    }
     SLK.emit("command", { cmd: c, ok: !!(def && def.ok) });
     if (!def || !def.ok) { toast(c + " is not part of this practice."); return; }
     MSGS.push({ id: "e1", bot: true, only: true, time: "Just now", lines: ["Opening Regular form..."] });
@@ -164,7 +168,7 @@
     picked = []; drawPicker(); $("#pk").style.display = "flex"; SLK.emit("picker-open");
   }
   function drawPicker(){
-    $("#pkl").innerHTML = '<div class="row h"><span>Name</span><span>Size</span><span>Kind</span></div>' + FILES.map(function(f){ return '<div class="row' + (picked.indexOf(f.id) >= 0 ? " on" : "") + '" data-f="' + f.id + '"><span><img src="' + f.src + '" alt="">' + esc(f.name) + '</span><span>' + f.size + '</span><span>PNG image</span></div>'; }).join("");
+    $("#pkl").innerHTML = '<div class="row h"><span>Name</span><span>Size</span><span>Kind</span></div>' + (FILES.length ? "" : '<div class="row" style="cursor:default"><span>Nothing here yet. Download the files first.</span><span></span><span></span></div>') + FILES.map(function(f){ return '<div class="row' + (picked.indexOf(f.id) >= 0 ? " on" : "") + '" data-f="' + f.id + '"><span><img src="' + f.src + '" alt="">' + esc(f.name) + '</span><span>' + f.size + '</span><span>PNG image</span></div>'; }).join("");
     $("#pkl").querySelectorAll("[data-f]").forEach(function(r){ r.onclick = function(){
       var id = r.dataset.f, i = picked.indexOf(id); if (i >= 0) picked.splice(i, 1); else picked.push(id);
       drawPicker(); SLK.emit("picker-select", picked.slice());
@@ -204,6 +208,9 @@
     $("#docs").style.display = "flex"; SLK.emit("docs-open", which);
   };
   SLK.docsOpen = function(){ return $("#docs").style.display === "flex"; };
+  /* View a downloaded file (to check the full name before using it) */
+  SLK.viewFile = function(id){ var f = ALL_FILES[id]; $("#ivt").textContent = f.name; $("#ivi").src = f.src; $("#iv").style.display = "flex"; SLK.emit("file-view", id); };
+  $("#iv .dx").onclick = function(){ $("#iv").style.display = "none"; };
   SLK.addFile = function(id){ if (!FILES.some(function(f){ return f.id === id; })) FILES.push(ALL_FILES[id]); };
   $("#docs .dx").onclick = function(){ $("#docs").style.display = "none"; SLK.emit("docs-close"); };
   SLK.state = function(){ return { form: SLK.sent, attached: SLK.attached.slice(), replies: replies.slice() }; };
