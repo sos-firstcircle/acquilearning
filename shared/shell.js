@@ -9,6 +9,7 @@ const ICON = {
   lesson:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h13"/>',
   sim:'<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
   exam:'<path d="M9 4h6v3H9z"/><path d="M7 5H5v16h14V5h-2"/><path d="M9 13l2 2 4-4"/>',
+  book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M9 7h6M9 11h6"/>',
   session:'<circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M14 20a4 4 0 0 1 7 0"/>',
   check:'<path d="M5 12l5 5 9-10"/>'
 };
@@ -25,6 +26,7 @@ function renderSide(active){
 
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}
+      ${LMS.isExisting() ? link("library.html","book","Library","library") : ""}
       ${link("department.html","session","Department","department")}
       ${LMS.isAdmin() ? `<li class="nav-label">Trainers</li>${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : ""}
     </ul>

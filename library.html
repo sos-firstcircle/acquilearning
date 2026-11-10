@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library | Acquisition Learning Hub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2a10 10 0 0 1 10 10h-7a3 3 0 0 0-3-3z' fill='%23F0605D'/><path d='M22 12a10 10 0 0 1-10 10v-7a3 3 0 0 0 3-3z' fill='%232BB3A8'/><path d='M12 22A10 10 0 0 1 2 12h7a3 3 0 0 0 3 3z' fill='%23F5B83D'/><path d='M2 12A10 10 0 0 1 12 2v7a3 3 0 0 0-3 3z' fill='%238FD3E0'/></svg>">
+<link rel="stylesheet" href="shared/theme.css">
+<script src="shared/lms.js"></script>
+<script src="shared/shell.js"></script>
+<script src="existing/library.js"></script>
+<style>
+  .lead{margin:6px 0 18px;color:var(--ink-2);font-size:15px;max-width:640px}
+  .bar{margin-bottom:22px}
+  .bar input{width:100%;max-width:380px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px}
+  .bar input:focus{outline:2px solid var(--teal);border-color:var(--teal)}
+  .sec{margin:0 0 26px}
+  .sec h2{font-size:17px;margin:0 0 10px;color:var(--deep)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+  .it{display:block;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 14px;text-decoration:none;color:var(--ink)}
+  .it:hover{border-color:var(--teal)}
+  .it b{display:block;font-size:14px}
+  .it span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+  .none{display:none;color:var(--ink-3)}
+</style>
+</head>
+<body>
+<div id="strip"></div>
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <main class="main"><div class="wrap" id="app"></div></main>
+</div>
+<script>
+if (LMS.requireSignIn()) {
+  if (!LMS.isExisting() && !LMS.isAdmin()) { location.replace("dashboard.html"); }
+  else {
+    renderSide("library");
+    document.getElementById("app").innerHTML = `<h1>Library</h1>
+      <p class="lead">Reading links and files in one place. Search for a topic or browse the groups.</p>
+      <div class="bar"><input id="q" type="search" placeholder="Search the library" autocomplete="off"></div>
+      ${LIBRARY_GROUPS.map(g => `<div class="sec"><h2>${esc(g.title)}</h2><div class="grid">${g.items.map(i => `<a class="it" href="${esc(i.href)}" target="_blank" rel="noopener" data-q="${esc((i.label+" "+g.title).toLowerCase())}"><b>${esc(i.label)}</b>${i.note?`<span>${esc(i.note)}</span>`:""}</a>`).join("")}</div></div>`).join("")}
+      <p class="none" id="none">Nothing found. Try a different word.</p>`;
+    document.getElementById("q").addEventListener("input", e => {
+      const q = e.target.value.trim().toLowerCase(); let n = 0;
+      document.querySelectorAll(".it").forEach(a => { const ok = !q || a.dataset.q.includes(q); a.style.display = ok ? "" : "none"; if (ok) n++; });
+      document.querySelectorAll(".sec").forEach(s => s.style.display = s.querySelector(".it:not([style*='none'])") ? "" : "none");
+      document.getElementById("none").style.display = n ? "none" : "block";
+    });
+  }
+}
+</script>
+</body>
+</html>
