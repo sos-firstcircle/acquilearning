@@ -11,16 +11,18 @@
 <script src="existing/library.js"></script>
 <style>
   .lead{margin:6px 0 18px;color:var(--ink-2);font-size:15px;max-width:640px}
-  .bar{margin-bottom:22px}
+  .bar{margin-bottom:14px}
   .bar input{width:100%;max-width:380px;padding:10px 14px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px}
   .bar input:focus{outline:2px solid var(--teal);border-color:var(--teal)}
-  .sec{margin:0 0 26px}
-  .sec h2{font-size:17px;margin:0 0 10px;color:var(--deep)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
-  .it{display:block;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 14px;text-decoration:none;color:var(--ink)}
-  .it:hover{border-color:var(--teal)}
-  .it b{display:block;font-size:14px}
-  .it span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:2px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:6px 36px;align-items:start}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  .sec{margin:0 0 16px}
+  .sec h2{font-size:15px;margin:0 0 6px;color:var(--deep)}
+  .sec ul{list-style:none;margin:0;padding:0}
+  .sec li{margin:0}
+  .it{display:flex;align-items:center;gap:8px;padding:5px 0;color:#000;font-size:14px;text-decoration:underline}
+  .it:hover{color:var(--teal-dark)}
+  .it svg{flex:none;color:#000}
   .none{display:none;color:var(--ink-3)}
 </style>
 </head>
@@ -31,19 +33,20 @@
   <main class="main"><div class="wrap" id="app"></div></main>
 </div>
 <script>
+const LINK_ICO = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg>';
 if (LMS.requireSignIn()) {
   if (!LMS.isExisting() && !LMS.isAdmin()) { location.replace("dashboard.html"); }
   else {
     renderSide("library");
     document.getElementById("app").innerHTML = `<h1>Library</h1>
-      <p class="lead">Reading links and files in one place. Search for a topic or browse the groups.</p>
+      <p class="lead" style="margin-bottom:12px">Reading links in one place.</p>
       <div class="bar"><input id="q" type="search" placeholder="Search the library" autocomplete="off"></div>
-      ${LIBRARY_GROUPS.map(g => `<div class="sec"><h2>${esc(g.title)}</h2><div class="grid">${g.items.map(i => `<a class="it" href="${esc(i.href)}" target="_blank" rel="noopener" data-q="${esc((i.label+" "+g.title).toLowerCase())}"><b>${esc(i.label)}</b>${i.note?`<span>${esc(i.note)}</span>`:""}</a>`).join("")}</div></div>`).join("")}
+      <div class="cols">${LIBRARY_GROUPS.map(g => `<div class="sec"><h2>${esc(g.title)}</h2><ul>${g.items.map(i => `<li><a class="it" href="${esc(i.href)}" target="_blank" rel="noopener" data-q="${esc((i.label+" "+g.title).toLowerCase())}">${LINK_ICO}<span>${esc(i.label)}</span></a></li>`).join("")}</ul></div>`).join("")}</div>
       <p class="none" id="none">Nothing found. Try a different word.</p>`;
     document.getElementById("q").addEventListener("input", e => {
       const q = e.target.value.trim().toLowerCase(); let n = 0;
-      document.querySelectorAll(".it").forEach(a => { const ok = !q || a.dataset.q.includes(q); a.style.display = ok ? "" : "none"; if (ok) n++; });
-      document.querySelectorAll(".sec").forEach(s => s.style.display = s.querySelector(".it:not([style*='none'])") ? "" : "none");
+      document.querySelectorAll(".it").forEach(a => { const li = a.parentNode; const ok = !q || a.dataset.q.includes(q); li.style.display = ok ? "" : "none"; if (ok) n++; });
+      document.querySelectorAll(".sec").forEach(s => s.style.display = s.querySelector("li:not([style*='none'])") ? "" : "none");
       document.getElementById("none").style.display = n ? "none" : "block";
     });
   }

@@ -26,7 +26,7 @@ function renderSide(active){
 
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}
-      ${LMS.isExisting() ? link("library.html","book","Library","library") : ""}
+      ${(LMS.isExisting() || LMS.isAdmin()) ? link("library.html","book","Library","library") : ""}
       ${link("department.html","session","Department","department")}
       ${LMS.isAdmin() ? `<li class="nav-label">Trainers</li>${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : ""}
     </ul>
