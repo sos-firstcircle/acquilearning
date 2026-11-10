@@ -131,8 +131,10 @@ function intro(blockedMsg){
     <p class="meta">${total} questions in ${EX.sections.length} sections. Pass mark ${EX.passing}%. Questions and answer choices are shuffled for each attempt.</p>
     <div class="note">${EX.sections.map((s, i) => `<b>Section ${i + 1}: ${esc(s.title)}</b><br>${esc(s.desc)}`).join("<br><br>")}</div>
     ${blockedMsg ? `<div class="note">${blockedMsg}</div>` : ""}
+    ${!blockedMsg && LMS.honorRequired() ? LMS.honorHtml() : ""}
     <div class="nav" style="justify-content:flex-start"><button class="btn primary" id="go" ${blockedMsg ? "disabled" : ""}>${blockedMsg ? "Already taken" : "Start exam"}</button></div>`;
-  if (!blockedMsg) $("go").onclick = () => { started = true; build(); question(); };
+  if (!blockedMsg && LMS.honorRequired()) LMS.honorWire($("go"));
+  if (!blockedMsg) $("go").onclick = () => { if (!LMS.honorOk()) return; started = true; build(); question(); };
 }
 
 function question(){

@@ -66,8 +66,10 @@ function intro(blockedMsg){
   $("card").innerHTML = `<h1>${esc(EX.title)}</h1>
     <p class="meta">${N} multiple-choice questions. Pass mark ${EX.passing}%. Pick one answer for each question.</p>
     ${blockedMsg ? `<div class="note">${blockedMsg}</div>` : ""}
+    ${!blockedMsg && LMS.honorRequired() ? LMS.honorHtml() : ""}
     <div class="nav" style="justify-content:flex-start"><button class="btn primary" id="go" ${blockedMsg ? "disabled" : ""}>${blockedMsg ? "Already taken" : "Start exam"}</button></div>`;
-  if (!blockedMsg) $("go").onclick = () => { started = true; cur = 0; question(); };
+  if (!blockedMsg && LMS.honorRequired()) LMS.honorWire($("go"));
+  if (!blockedMsg) $("go").onclick = () => { if (!LMS.honorOk()) return; started = true; cur = 0; question(); };
 }
 
 function question(){

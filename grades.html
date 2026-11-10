@@ -120,6 +120,8 @@ async function loadMine(){
   else $("app").innerHTML = '<h1>My grades</h1><p class="muted">Couldn\'t load your grades right now.</p><button class="btn" id="retryMine" style="margin-top:12px">Try again</button>';
   const rb = $("retryMine"); if (rb) rb.onclick = loadMine;
 }
+/* Honor-code name saved at the start of Details ("Honor code: NAME | ..."). Learners only see this part, never the score notes. */
+const honorOf = r => { const m = /^Honor code: (.*?)(?: \| |$)/.exec(String(r.Details || "")); return m ? "Taken by: " + m[1] : ""; };
 function drawMine(grades, note, retry){
   const rows = grades.filter(r => !String(r["Exam ID"]).startsWith("TEST-")).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
   const best = {}; rows.forEach(r => { const p = pct(r); if (best[r["Exam ID"]] == null || (p != null && p > best[r["Exam ID"]].p)) best[r["Exam ID"]] = { ...r, p }; });
@@ -128,8 +130,8 @@ function drawMine(grades, note, retry){
     <div class="scroll" style="margin-top:18px"><table class="tbl"><thead><tr><th>Exam</th><th>Best score</th><th>Result</th><th>Attempts</th></tr></thead><tbody>
       ${exams.map(r=>`<tr><td><b>${esc(nice(r["Exam ID"]))}</b></td><td>${esc(r.Score)}/${esc(r.Max)}${r.p!=null?` (${r.p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td><td>${rows.filter(x=>x["Exam ID"]===r["Exam ID"]).length}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No graded exams yet.</td></tr>'}
     </tbody></table></div>
-    ${rows.length ? `<h2 class="sec">Every attempt</h2><div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th></tr></thead><tbody>
-      ${rows.map(r=>{ const p = pct(r); return `<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)}${p!=null?` (${p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td></tr>`; }).join("")}
+    ${rows.length ? `<h2 class="sec">Every attempt</h2><div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody>
+      ${rows.map(r=>{ const p = pct(r); return `<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)}${p!=null?` (${p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td><td class="small muted">${esc(honorOf(r))}</td></tr>`; }).join("")}
     </tbody></table></div>` : ""}`;
   const rb = $("retryMine"); if (rb) rb.onclick = e => { e.preventDefault(); loadMine(); };
 }

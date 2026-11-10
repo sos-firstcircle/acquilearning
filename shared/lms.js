@@ -30,6 +30,7 @@ window.LMS_CONFIG = {
   // (for people who did those days before this site existed). Delete a line to turn it off.
   // Batches allowed to retake exams. Everyone else gets one attempt per exam.
   multiAttempt: ["000001", "000002"],
+  honorCode: ["000002"],              // batches that share one login: exams ask for a typed name first (saved with the result as a Note)
   noReview: ["000002"],               // batches that can retake but cannot reopen their last answers/result
   catchUp: {},                        // e.g. { "101926": [1, 2, 3] }
   adminEmails: [],                    // who can open admin.html, e.g. ["tm.name@firstcircle.com"]
@@ -162,6 +163,19 @@ window.LMS_CONFIG = {
     /** May the signed-in person retake exams? (their batch is listed in multiAttempt) */
     canRetake(){ const u = currentUser(); return !!u && (C.multiAttempt || []).includes(batchOf(u.email)); },
 
+    /** Honor code (shared-login batches in C.honorCode): the exam intro shows a pledge and a name box; the name is saved with the result. */
+    honorRequired(){ const u = currentUser(); return !!u && (C.honorCode || []).includes(batchOf(u.email)) && !isPreview(); },
+    honorHtml(){
+      return `<div class="note" id="honorBox" style="margin:14px 0"><b>Honor code</b><br>I will take this exam on my own, without notes, help or looking at the answers. Please type your full name.<br><input id="honorName" type="text" autocomplete="off" placeholder="Your full name" style="margin-top:8px;width:100%;max-width:320px;padding:9px 12px;border:1px solid #CBD5D7;border-radius:8px;font:inherit;font-size:14px"></div>`;
+    },
+    /** Wire the name box to the start button (disabled until a name is typed). Call after honorHtml() is on the page. */
+    honorWire(btn){
+      LMS.honorName = ""; const inp = document.getElementById("honorName"); if (!inp || !btn) return;
+      const sync = () => { LMS.honorName = inp.value.trim().replace(/\s+/g, " "); btn.dataset.honor = LMS.honorName.length >= 3 ? "1" : ""; btn.disabled = btn.dataset.blocked === "1" || !btn.dataset.honor; };
+      inp.addEventListener("input", sync); sync();
+    },
+    honorOk(){ return !LMS.honorRequired() || (LMS.honorName || "").length >= 3; },
+
     /** True if this email belongs to the allowed company domain. */
     isCompanyEmail,
 
@@ -252,7 +266,8 @@ window.LMS_CONFIG = {
       if (isPreview()) return Promise.resolve(rec);                 // admin preview: not recorded
       p[id] = rec;
       write(progressKey(), p);
-      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:result.details || "", breakdown:result.breakdown || "", notes:result.notes || "" });
+      const honor = LMS.honorRequired() && LMS.honorName ? "Honor code: " + LMS.honorName + (result.details ? " | " : "") : "";
+      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "" });
       return Promise.resolve(p[id]);
     },
 
@@ -286,6 +301,7 @@ window.LMS_CONFIG = {
     /** Admin only: every reply (all rows of the Sessions tab). */
     adminRsvps(){ return send("adminRsvps", {}, { retry:true }); },
 
+    chat(question){ return send("chat", { question }, { timeout: 60000 }); },
     adminData(passcode){ return send("adminData", { passcode }, { retry:true }); },
 
     signOut(){
