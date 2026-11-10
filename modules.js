@@ -40,5 +40,7 @@ window.LMS_SESSIONS = [
   // id: used by days (sessions:["id"]) and for the saved Yes/No. Never rename once people have replied. batch: one batch number or a list (who is expected; test batch 000000 is included so it can be previewed) (shown on the Sessions page). desc: full description ("See details").
   { id:"s-d2-f2f", batch:["110926","000000"], title:"Day 2: Onboarding - [F2F] Industry and Product Knowledge Discussion", when:"2026-11-10T15:00", minutes:165, room:"BOTT-1-Board Room (15)", link:"", desc:"" },
   { id:"s-d3-self", batch:["110926","000000"], title:"Day 3: Onboarding [Self Pace] - Product Exam 1 & Connect Learning Materials", when:"2026-11-11T09:00", minutes:165, room:"", link:"",
-    desc:"Please accomplish Product Exam 1, Guided Demos (Onboarding), and Guided Demos (Open BCL) for the morning." }
+    desc:"Please accomplish Product Exam 1, Guided Demos (Onboarding), and Guided Demos (Open BCL) for the morning." },
+  { id:"s-d3-virtual", batch:["110926","000000"], title:"Day 3: Onboarding - [Virtual] Product Exam 1 & First Circle Connect Intro Discussion", when:"2026-11-11T14:30", minutes:180, room:"", link:"https://meet.google.com/eno-jkod-mae",
+    desc:"Review answers for Product Exam 1. Introduction discussion for our main banking platform, First Circle Connect." }
 ];

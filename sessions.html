@@ -64,7 +64,7 @@ function render(rows){
     const list = emails.map(rowOf).sort((x, y) => ({ no:0, "":1, yes:2 }[x.a] - { no:0, "":1, yes:2 }[y.a]) || x.e.localeCompare(y.e));
     const n = a => list.filter(x => x.a === a).length;
     return `<div class="sc"><h3>${esc(s.title)}</h3>
-      <div class="meta">${esc(fmt(s))} · Room: ${s.room ? esc(s.room) : "None"} · Meeting link: ${s.link ? esc(s.link) : "None"}${s.batch ? ` · Batch ${esc(bl(s).join(", "))}` : ""}${s.desc ? `<br>${esc(s.desc)}` : ""}</div>
+      <div class="meta">${esc(fmt(s))} · Room: ${s.room ? esc(s.room) : "None"} · Meeting link: ${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link.replace(/^https?:\/\//, ""))}</a>` : "None"}${s.batch ? ` · Batch ${esc(bl(s).join(", "))}` : ""}${s.desc ? `<br>${esc(s.desc)}` : ""}</div>
       <div class="counts"><span class="pill yes">Yes ${n("yes")}</span><span class="pill no">No ${n("no")}</span><span class="pill none">No reply ${n("")}</span></div>
       <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Reply</th><th>Informed team lead</th><th>Message to trainer</th><th>When</th></tr></thead><tbody>
       ${list.map(({ e, r, a }) => `<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${a ? `<span class="pill ${a}">${a === "yes" ? "Yes" : "No"}</span>` : '<span class="pill none">No reply yet</span>'}</td><td>${a === "no" ? (r["Informed TL"] === "Yes" ? "Yes" : "—") : ""}</td><td>${esc(String(r && r.Note || "").replace(/^'/, ""))}</td><td class="small muted">${r ? esc(when(r.Timestamp)) : ""}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No onboardees on the list.</td></tr>'}
