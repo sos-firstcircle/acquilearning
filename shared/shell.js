@@ -11,6 +11,7 @@ const ICON = {
   exam:'<path d="M9 4h6v3H9z"/><path d="M7 5H5v16h14V5h-2"/><path d="M9 13l2 2 4-4"/>',
   book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2z"/><path d="M9 7h6M9 11h6"/>',
   session:'<circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 20a6 6 0 0 1 12 0M14 20a4 4 0 0 1 7 0"/>',
+  chat:'<path d="M4 5h16v11H9l-5 4z"/>',
   check:'<path d="M5 12l5 5 9-10"/>'
 };
 const ico = (k,s=18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
@@ -28,7 +29,7 @@ function renderSide(active){
       ${link("grades.html","grades","Grades","grades")}
       ${(LMS.isExisting() || LMS.isAdmin()) ? link("library.html","book","Library","library") : ""}
       ${link("department.html","session","Department","department")}
-      ${LMS.isAdmin() ? `<li class="nav-label">Trainers</li>${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : ""}
+      ${LMS.isAdmin() ? `<li class="nav-label">Trainers</li>${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("chatbot.html","chat","Chatbot (pilot)","chatbot")}${link("settings.html","admin","Settings","settings")}` : ""}
     </ul>
     <div class="side-foot"><span class="av">${esc(LMS.initials(u.name))}</span><div><b>${esc(u.name)}</b>${LMS.batchOf(u.email) ? `<small style="display:block;color:#8FB0B6;font-size:11px;line-height:1.3">Batch ${esc(LMS.batchOf(u.email))}</small>` : ""}<button id="signOut">Sign out</button></div></div>`;
   document.getElementById("signOut").onclick = () => LMS.signOut();

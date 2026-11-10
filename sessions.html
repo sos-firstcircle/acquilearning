@@ -39,6 +39,7 @@ const fmt = s => { const d = new Date(s.when), end = new Date(d.getTime()+(s.min
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`; };
 
 let noReplies = false, batchSel = "";
+const TEST_BATCHES = ["000000", "000001"];   // test accounts: left out of "All batches"; pick the batch to see them
 async function load(){
   $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading replies from the Sheet…</p>';
   const res = await LMS.adminRsvps();
@@ -56,7 +57,7 @@ function render(rows){
   const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(Object.keys(R.batches)))].sort();
   const sessions = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).map(s => ({ ...s, d:new Date(s.when) })).sort((a,b) => a.d - b.d);
   const card = s => {
-    const expected = (s.batch ? bl(s).filter(b => !batchSel || b === batchSel).flatMap(b => R.batches[b] || []) : R.learners).map(e => e.toLowerCase());
+    const expected = (s.batch ? bl(s).filter(b => batchSel ? b === batchSel : !TEST_BATCHES.includes(b)).flatMap(b => R.batches[b] || []) : R.learners).map(e => e.toLowerCase());
     const replies = Object.values(latest).filter(r => r["Session ID"] === s.id);
     const emails = [...new Set([...expected, ...replies.map(r => String(r.Email).toLowerCase())])].filter(e => !R.admins.map(a => a.toLowerCase()).includes(e));
     const rowOf = e => { const r = latest[e + "|" + s.id]; return { e, r, a: r ? r.Answer : "" }; };

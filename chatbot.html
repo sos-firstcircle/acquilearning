@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chatbot (pilot) | Acquisition Learning Hub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2a10 10 0 0 1 10 10h-7a3 3 0 0 0-3-3z' fill='%23F0605D'/><path d='M22 12a10 10 0 0 1-10 10v-7a3 3 0 0 0 3-3z' fill='%232BB3A8'/><path d='M12 22A10 10 0 0 1 2 12h7a3 3 0 0 0 3 3z' fill='%23F5B83D'/><path d='M2 12A10 10 0 0 1 12 2v7a3 3 0 0 0-3 3z' fill='%238FD3E0'/></svg>">
+<link rel="stylesheet" href="shared/theme.css">
+<script src="shared/lms.js"></script>
+<script src="shared/shell.js"></script>
+<script src="department/jargon.js"></script>
+<style>
+  .lead{margin:8px 0 16px;color:var(--ink-2);font-size:15px;max-width:640px}
+  .pilot{background:#FFF4D6;border:1px solid #F5B83D;border-radius:12px;padding:12px 14px;font-size:14px;max-width:640px;margin-bottom:16px}
+  .chat{border:1px solid var(--line);border-radius:14px;background:#fff;max-width:640px;display:flex;flex-direction:column;height:480px}
+  #log{flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:10px}
+  .m{padding:10px 12px;border-radius:12px;max-width:85%;font-size:14px;line-height:1.45;white-space:pre-wrap}
+  .m.me{align-self:flex-end;background:#2BB3A8;color:#fff}
+  .m.bot{align-self:flex-start;background:#F2F5F6}
+  .m small{display:block;margin-top:6px;color:#6b7c80;font-size:11px}
+  .send{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+  .send input{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
+</style>
+</head>
+<body>
+<div id="strip"></div>
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <main class="main"><div class="wrap" id="app"></div></main>
+</div>
+<script>
+if (LMS.requireSignIn()) {
+  renderSide("chatbot");
+  const app = document.getElementById("app");
+  if (!LMS.isAdmin()) app.innerHTML = `<h1>Chatbot</h1><p class="lead">This page is for trainers only.</p>`;
+  else {
+    app.innerHTML = `<h1>Ask Acqui</h1>
+      <div class="pilot"><b>Pilot, admins only.</b> Questions are answered by Claude using only First Circle's notes. Until the backend is set up, a basic jargon lookup in your browser is used instead. Not visible to onboardees.</div>
+      <div class="chat"><div id="log"></div>
+        <form class="send" id="f"><input id="q" autocomplete="off" placeholder="Ask anything, e.g. what is bcl? / ano ang SOS?"><button class="btn primary">Send</button></form></div>`;
+    const log = document.getElementById("log"), q = document.getElementById("q");
+    const add = (cls, t, note) => { const d = document.createElement("div"); d.className = "m " + cls; d.textContent = t; if (note) { const s = document.createElement("small"); s.textContent = note; d.appendChild(s); } log.appendChild(d); log.scrollTop = log.scrollHeight; };
+    const terms = [].concat(...(window.DEPT_JARGON || []).map(g => g.terms || [].concat(...(g.rows || []))));
+    const norm = s => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+    const STOP = new Set("what is the a an define meaning of ano ang yung ng sa ba po mean does stand for explain".split(" "));
+    function answer(text) {
+      const words = norm(text).split(" ").filter(w => w && !STOP.has(w)), joined = words.join(" ");
+      let best = null;
+      for (const t of terms) {
+        const keys = [t.term, t.abbr].filter(Boolean).map(norm);
+        if (keys.some(k => k === joined || (k.length > 2 && ` ${norm(text)} `.includes(` ${k} `)) || words.includes(k))) { best = t; break; }
+      }
+      return best ? [`${best.term}${best.abbr ? " (" + best.abbr + ")" : ""}: ${best.def}`, "Source: department jargon (stub match)"] : ["I'm not sure, ask your Team Lead.", null];
+    }
+    add("bot", "Hi! Pilot stub: I only know the jargon list for now. Try \"bcl\" or \"define SOS\".");
+    document.getElementById("f").onsubmit = async e => { e.preventDefault(); const t = q.value.trim(); if (!t) return; add("me", t); q.value = ""; add("bot", "..."); const r = await LMS.chat(t); log.lastChild.remove(); if (r && r.ok) add("bot", r.answer, `AI answer, from the notes. ${r.left} questions left today.`); else if (r && r.error === "daily-cap") add("bot", "Daily question limit reached. Try again tomorrow."); else { const [a, n] = answer(t); add("bot", a, (n ? n + ". " : "") + "Backend not live yet" + (r && r.error ? " (" + r.error + ")" : "") + "."); } };
+  }
+}
+</script>
+</body>
+</html>

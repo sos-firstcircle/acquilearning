@@ -283,7 +283,8 @@ function sessionsHtml(){
   if (C.embedSrc) h = `<iframe class="cal-frame" title="Training calendar" src="${esc(C.embedSrc)}${C.embedSrc.includes("?")?"&":"?"}mode=AGENDA&ctz=Asia%2FManila&showTitle=0&showPrint=0&showTabs=0&showCalendars=0"></iframe>`;
   else {
     const now = new Date();
-    const up = mySessions().map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
+    const lockedIds = LMS.isAdmin() ? [] : compute().days.filter(d => d.status === "locked").flatMap(d => d.sessions || []);   // a session on a locked day stays hidden until that day opens (admins see all)
+    const up = mySessions().filter(s => !lockedIds.includes(s.id)).map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
     const g = x => x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
     h = up.length ? `<ul class="sess">${up.map(s => {
       const end = new Date(s.d.getTime()+(s.minutes||60)*60000);
