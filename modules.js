@@ -42,5 +42,9 @@ window.LMS_SESSIONS = [
   { id:"s-d3-self", batch:["110926","000000"], title:"Day 3: Onboarding [Self Pace] - Product Exam 1 & Connect Learning Materials", when:"2026-11-11T09:00", minutes:165, room:"", link:"",
     desc:"Please accomplish Product Exam 1, Guided Demos (Onboarding), and Guided Demos (Open BCL) for the morning." },
   { id:"s-d3-virtual", batch:["110926","000000"], title:"Day 3: Onboarding - [Virtual] Product Exam 1 & First Circle Connect Intro Discussion", when:"2026-11-11T14:30", minutes:180, room:"", link:"https://meet.google.com/eno-jkod-mae",
-    desc:"Review answers for Product Exam 1. Introduction discussion for our main banking platform, First Circle Connect." }
+    desc:"Review answers for Product Exam 1. Introduction discussion for our main banking platform, First Circle Connect." },
+  { id:"s-d4-self", batch:["110926","000000"], title:"Day 4: Onboarding [Self Pace] - Product Exam 2 & FC Connect Simulation Exam", when:"2026-11-12T09:00", minutes:165, room:"", link:"",
+    desc:"Please accomplish Product Knowledge Examination 2 and the FC Connect Simulation Exam for the morning." },
+  { id:"s-d4-virtual", batch:["110926","000000"], title:"Day 4: Onboarding [Virtual] - Intro to Acqui Service Part 1", when:"2026-11-12T14:30", minutes:180, room:"", link:"https://meet.google.com/znc-stnp-owm",
+    desc:"Introduction discussion to our in-house CRM, Acquisitions Service (Acqui Service/ACQ SVC)." }
 ];

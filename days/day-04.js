@@ -3,6 +3,7 @@ LMS_DAY_DEFS[4] = {
   title: "Connect Exam Simulation",
   brief: "Virtual simulation exam for FC Connect.",
   tasks: [],
+  sessions: ["s-d4-self", "s-d4-virtual"],   // ids from LMS_SESSIONS in modules.js; shown at the bottom of the dropdown with a Yes/No
   materials: [],
   // kind "sim": opens the simulation, which records the result itself (no manual "I've submitted it" button). Pass mark matches PASS_MARK in sims/connect-exam.html.
   exams: [
