@@ -81,6 +81,17 @@
   .daydone{margin-top:16px;font-size:14px;color:var(--green);font-weight:600}
   .exam{margin-top:16px}
   .panel h2{font-size:16px;margin-bottom:12px}
+  .rsvp{margin-top:10px}
+  .rsvpbtns{display:grid;grid-template-columns:repeat(2,88px);gap:8px;margin-top:6px}
+  .rsvpbtns .btn{width:100%}
+  .rsvpform{margin-top:10px;padding:10px 12px;border-radius:10px;background:var(--mist);display:flex;flex-direction:column;gap:8px;max-width:420px}
+  .rsvpform textarea{width:100%;padding:8px 10px;border:1px solid #C9D6D8;border-radius:8px;font:inherit;font-size:13px;resize:vertical;background:#fff}
+  .rsvpform .chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;cursor:pointer}
+  .rsvpform .chk input{margin-top:3px}
+  .btn[disabled]{opacity:.5;pointer-events:none}
+  details.more{margin-top:4px;font-size:13px}details.more summary{cursor:pointer;font-weight:600;color:var(--teal-dark)}details.more .w{margin-top:4px}
+  .daysess{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff;line-height:1.5}
+  .rsvpok{display:inline-flex;gap:5px;align-items:center;font-size:13px;font-weight:600;color:var(--teal-dark)}
   .sess{list-style:none;margin:0;padding:0}
   .sess li{display:grid;grid-template-columns:48px 1fr;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
   .sess li:first-child{padding-top:0}
@@ -229,7 +240,42 @@ function dropdown(sel, P){
     else if (sel.materialsBelow) body = `<div class="two keep">${tasks ? `<div>${taskList}</div>` : "<div></div>"}${soonGrp ? `<div>${soonGrp}</div>` : "<div></div>"}</div>${mats ? `<div style="margin-top:6px">${matsBlock}</div>` : ""}`;
     else body = `<div class="two">${tasks ? `<div>${taskList}${soonGrp}</div>` : "<div></div>"}${matsBlock}</div>`;
   }
-  return `<div class="drop">${body}${examHtml}${sel.status==="complete"?`<div class="daydone">${ico("check",16)} Day ${sel.day} complete</div>`:""}${catchBtn(sel)}</div>`;
+  return `<div class="drop">${body}${examHtml}${daySessions(sel)}${sel.status==="complete"?`<div class="daydone">${ico("check",16)} Day ${sel.day} complete</div>`:""}${catchBtn(sel)}</div>`;
+}
+
+/* Yes/No on a live session. The reply is saved to the Sheet (Sessions tab) and cached in this browser, so a refresh still shows the highlighted button.
+   The confirmation text only shows right after clicking (rsvpMsg): "Response recorded." the first time, "Changes recorded." when they change it.
+   "No" opens a form (note to the trainer + "I have informed my team lead" tick) and is only saved when they submit it. */
+const rsvpMsg = {}, rsvpOpen = {}, rsvpDraft = {};
+function rsvpHtml(id){
+  const cur = LMS.rsvps()[id], shown = rsvpOpen[id] ? "no" : (cur && cur.answer), d = rsvpDraft[id] || {};
+  const form = rsvpOpen[id] ? `<div class="rsvpform"><label class="small" for="rn-${esc(id)}">Message to your trainer (optional)</label>
+      <textarea id="rn-${esc(id)}" data-rsvp-note="${esc(id)}" rows="3" maxlength="1000" placeholder="Reason, notes for your trainer…">${esc(d.note||"")}</textarea>
+      <label class="chk"><input type="checkbox" data-rsvp-informed="${esc(id)}" ${d.informed?"checked":""}><span>I have informed my team lead of my absence</span></label>
+      <div class="rsvpbtns"><button class="btn sm primary" data-rsvp-submit="${esc(id)}" ${d.informed?"":"disabled"}>Submit</button><button class="btn sm" data-rsvp-cancel="${esc(id)}">Cancel</button></div></div>` : "";
+  const note = !rsvpOpen[id] && cur && cur.answer === "no" && cur.note ? `<div class="small muted" style="margin-top:6px">Your note: ${esc(cur.note)}</div>` : "";
+  return `<div class="rsvp"><span class="small muted">Will you attend?</span>
+    <div class="rsvpbtns"><button class="btn sm${shown==="yes"?" primary":""}" data-rsvp="${esc(id)}" data-ans="yes" aria-pressed="${shown==="yes"}">Yes</button>
+    <button class="btn sm${shown==="no"?" primary":""}" data-rsvp="${esc(id)}" data-ans="no" aria-pressed="${shown==="no"}">No</button></div>
+    ${form}${note}${rsvpMsg[id] ? `<div class="rsvpok">${ico("check",14)} ${rsvpMsg[id]}</div>` : ""}</div>`;
+}
+function saveRsvp(id, answer, note, informed){
+  const had = LMS.rsvps()[id];
+  rsvpMsg[id] = had ? "Changes recorded." : "Response recorded.";
+  rsvpOpen[id] = false; delete rsvpDraft[id];
+  LMS.saveRsvp(id, answer, note, informed); render();
+}
+function sessionTime(s){
+  const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
+  return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`;
+}
+// Sessions for this person's batch (admins see all). A session with no batch is for everyone.
+const mySessions = () => (window.LMS_SESSIONS||[]).filter(s => !s.batch || LMS.isAdmin() || [].concat(s.batch).includes(LMS.batchOf((LMS.user()||{}).email)));
+function daySessions(sel){
+  const list = (sel.sessions||[]).map(id => mySessions().find(x => x.id === id)).filter(Boolean);
+  if (!list.length) return "";
+  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess"><b>${esc(s.title)}</b>
+    <div class="small muted">${esc(sessionTime(s))}</div><div class="small muted">Room: ${s.room?esc(s.room):"None"}</div><div class="small muted">Meeting link: ${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:"None"}</div>${s.desc?`<div class="small muted">Description: ${esc(s.desc)}</div>`:""}${s.id?rsvpHtml(s.id):""}</div>`).join("")}</div>`;
 }
 
 function sessionsHtml(){
@@ -237,15 +283,15 @@ function sessionsHtml(){
   if (C.embedSrc) h = `<iframe class="cal-frame" title="Training calendar" src="${esc(C.embedSrc)}${C.embedSrc.includes("?")?"&":"?"}mode=AGENDA&ctz=Asia%2FManila&showTitle=0&showPrint=0&showTabs=0&showCalendars=0"></iframe>`;
   else {
     const now = new Date();
-    const up = (window.LMS_SESSIONS||[]).map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
+    const up = mySessions().map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
     const g = x => x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
     h = up.length ? `<ul class="sess">${up.map(s => {
       const end = new Date(s.d.getTime()+(s.minutes||60)*60000);
-      const add = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(s.title)}&dates=${g(s.d)}/${g(end)}&ctz=Asia/Manila`;
+      const add = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(s.title)}&location=${encodeURIComponent(s.room||"")}&dates=${g(s.d)}/${g(end)}&ctz=Asia/Manila`;
       const time = s.d.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})+" to "+end.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
       return `<li><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
-        <div><div class="t">${esc(s.title)}</div><div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>
-        <div class="links">${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}<a href="${add}" target="_blank" rel="noopener">Add to calendar</a></div></div></li>`; }).join("")}</ul>`
+        <div><div class="t">${esc(s.title)}</div><div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>${s.room?`<div class="w">Room: ${esc(s.room)}</div>`:""}${s.desc?`<details class="more"><summary>See details</summary><div class="w">${esc(s.desc)}</div></details>`:""}
+        <div class="links">${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}<a href="${add}" target="_blank" rel="noopener">Add to calendar</a></div>${s.id?rsvpHtml(s.id):""}</div></li>`; }).join("")}</ul>`
       : `<p class="muted small" style="margin:0">No sessions scheduled yet.</p>`;
   }
   if (C.link) h += `<a class="cal-link" href="${esc(C.link)}" target="_blank" rel="noopener">Open the training calendar</a>`;
@@ -340,11 +386,27 @@ document.addEventListener("click", e => {
   if (m){ const day = window.LMS_DAYS.find(x => x.day === +m.dataset.markday);
     day.tasks.forEach(t => LMS.complete(t.id)); day.exams.forEach(e => { if (!e.soon) LMS.complete(e.id); }); LMS.complete("catchup-d" + day.day);
     advance(); return; }
+  const rv = e.target.closest("[data-rsvp]");
+  if (rv){ const id = rv.dataset.rsvp, cur = LMS.rsvps()[id];
+    if (rv.dataset.ans === "yes") { if (cur && cur.answer === "yes" && !rsvpOpen[id]) return; saveRsvp(id, "yes", "", false); }
+    else { delete rsvpMsg[id]; rsvpOpen[id] = true; rsvpDraft[id] = rsvpDraft[id] || (cur && cur.answer === "no" ? { note:cur.note, informed:cur.informed } : {}); render(); }
+    return; }
+  const rs = e.target.closest("[data-rsvp-submit]"); if (rs){ const id = rs.dataset.rsvpSubmit, d = rsvpDraft[id] || {}; if (d.informed) saveRsvp(id, "no", d.note || "", true); return; }
+  const rc = e.target.closest("[data-rsvp-cancel]"); if (rc){ rsvpOpen[rc.dataset.rsvpCancel] = false; delete rsvpDraft[rc.dataset.rsvpCancel]; render(); return; }
   const s = e.target.closest("[data-submit]"); if (s){ LMS.complete(s.dataset.submit); advance(); return; }
   const o = e.target.closest("[data-open]");
   if (o) LMS.start(o.dataset.open);
 });
+document.addEventListener("input", e => {      // note box: keep the draft (and the twin form, if the session shows twice) without re-rendering
+  const n = e.target.closest("[data-rsvp-note]"); if (!n) return;
+  const id = n.dataset.rsvpNote; (rsvpDraft[id] = rsvpDraft[id] || {}).note = n.value;
+  document.querySelectorAll("[data-rsvp-note]").forEach(x => { if (x.dataset.rsvpNote === id && x !== n) x.value = n.value; });
+});
 document.addEventListener("change", e => {
+  const r = e.target.closest("[data-rsvp-informed]");
+  if (r){ const id = r.dataset.rsvpInformed; (rsvpDraft[id] = rsvpDraft[id] || {}).informed = r.checked;
+    document.querySelectorAll("[data-rsvp-informed]").forEach(x => { if (x.dataset.rsvpInformed === id) x.checked = r.checked; });
+    document.querySelectorAll("[data-rsvp-submit]").forEach(x => { if (x.dataset.rsvpSubmit === id) x.disabled = !r.checked; }); return; }
   const t = e.target.closest("[data-task]"); if (!t) return;
   if (t.checked) LMS.complete(t.dataset.task); else LMS.undo(t.dataset.task);
   advance();
@@ -357,7 +419,7 @@ function advance(){
 }
 
 window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
-if (LMS.requireSignIn()) { renderSide("dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); }
+if (LMS.requireSignIn()) { renderSide("dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); LMS.syncRsvps().then(changed => { if (changed && !Object.values(rsvpOpen).some(Boolean)) render(); }); }
 </script>
 </body>
 </html>

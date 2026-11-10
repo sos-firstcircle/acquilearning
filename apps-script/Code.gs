@@ -61,6 +61,9 @@ const EXAM_TABS = { "d1-exam-responsible-selling": "D1-1", "d4-exam-connect-sim"
 // Site settings (e.g. the trainer name that narrates the Acqui Service tour). One row per setting; admins change them on the Settings page.
 const SETTINGS_SHEET = "Settings";
 const SETTINGS_HEADER = ["Key", "Value", "Updated", "By"];
+// Yes/No replies to live sessions. One row per reply; the latest row per person + session wins. Shown to trainers on sessions.html.
+const SESSIONS_SHEET = "Sessions";
+const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Answer", "Note", "Informed TL"];
 const EXAM_TAB_HEADER = ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details"];
 // Exams whose tab needs a different header (default is EXAM_TAB_HEADER). The Connect sim also records the step-by-step breakdown and trainer notes.
 const EXAM_TAB_HEADERS = { "d4-exam-connect-sim": ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Breakdown", "Notes"] };
@@ -121,6 +124,26 @@ function doPost(e) {
       if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
       return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET) });
+    }
+    if (req.action === "saveRsvp") {
+      const ans = p.answer === "yes" ? "yes" : p.answer === "no" ? "no" : "";
+      if (!p.id || !ans) throw new Error("bad-rsvp");
+      let note = String(p.note || "").slice(0, 1000);
+      if (/^[=+\-@]/.test(note)) note = "'" + note;     // keep a typed note from being read as a formula
+      appendByHeader_(sheet_(SESSIONS_SHEET, SESSIONS_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Session ID": String(p.id).slice(0, 60), "Answer": ans, "Note": note, "Informed TL": p.informed ? "Yes" : "" });
+      return json_({ ok: true });
+    }
+    if (req.action === "myRsvps") {
+      const out = {};
+      readRows_(SESSIONS_SHEET).forEach(function (r) {
+        if (String(r.Email).toLowerCase() !== user.email) return;
+        out[r["Session ID"]] = { answer: r.Answer, note: String(r.Note || "").replace(/^'/, ""), informed: r["Informed TL"] === "Yes", at: new Date(r.Timestamp).getTime() || 0 };   // later rows overwrite earlier ones
+      });
+      return json_({ ok: true, rsvps: out });
+    }
+    if (req.action === "adminRsvps") {
+      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      return json_({ ok: true, rsvps: readRows_(SESSIONS_SHEET) });
     }
     if (req.action === "getSettings") {       // any allowed person (the tour reads the trainer name)
       const out = {};

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sessions | Acquisition Learning Hub</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M12 2a10 10 0 0 1 10 10h-7a3 3 0 0 0-3-3z' fill='%23F0605D'/><path d='M22 12a10 10 0 0 1-10 10v-7a3 3 0 0 0 3-3z' fill='%232BB3A8'/><path d='M12 22A10 10 0 0 1 2 12h7a3 3 0 0 0 3 3z' fill='%23F5B83D'/><path d='M2 12A10 10 0 0 1 12 2v7a3 3 0 0 0-3 3z' fill='%238FD3E0'/></svg>">
+<link rel="stylesheet" href="shared/theme.css">
+<script src="shared/lms.js"></script>
+<script src="modules.js"></script>
+<script src="shared/shell.js"></script>
+<style>
+  .lead{margin:8px 0 22px;color:var(--ink-2);font-size:15px;max-width:680px}
+  .sc{border:1px solid var(--line);border-radius:14px;padding:18px;background:#fff;margin-bottom:16px}
+  .sc h3{font-size:16px;line-height:1.3}
+  .sc .meta{font-size:13px;color:var(--ink-2);margin:2px 0 10px}
+  .counts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .pill{display:inline-block;font-weight:600;padding:2px 10px;border-radius:20px;font-size:13px}
+  .pill.yes{background:var(--green-soft);color:var(--green)} .pill.no{background:var(--coral-soft);color:var(--coral)} .pill.none{background:var(--mist);color:var(--ink-3)}
+  .tbl{width:100%;border-collapse:collapse;font-size:14px}
+  .tbl th{text-align:left;font-size:12px;font-weight:600;color:var(--ink-2);padding:8px 12px;border-bottom:1px solid var(--line);white-space:nowrap}
+  .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:var(--r-lg)}
+  h2.sec{font-size:16px;margin:28px 0 12px}
+  .bar{margin:0 0 18px}
+</style>
+</head>
+<body>
+<div id="strip"></div>
+<div class="shell">
+  <aside class="side" id="side"></aside>
+  <main class="main"><div class="wrap" id="app"></div></main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+const nameOf = e => e.split("@")[0].split(/[._-]/).map(w => w ? w[0].toUpperCase()+w.slice(1) : "").join(" ");
+const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : "";
+const fmt = s => { const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
+  return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`; };
+
+let noReplies = false, batchSel = "";
+async function load(){
+  $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading replies from the Sheet…</p>';
+  const res = await LMS.adminRsvps();
+  if (res && res.error === "not-admin") { $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Your email isn\'t an admin.</p>'; return; }
+  noReplies = !res || !res.ok;   // still show the sessions; replies come once the Sheet answers (or Code.gs is redeployed)
+  render((res && res.rsvps) || []);
+}
+
+function render(rows){
+  // latest reply per person + session wins
+  const latest = {};
+  rows.slice().sort((a,b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => { latest[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = r; });
+  const R = LMS.roster(), now = new Date();
+  const bl = s => s.batch ? [].concat(s.batch) : [];
+  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(Object.keys(R.batches)))].sort();
+  const sessions = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).map(s => ({ ...s, d:new Date(s.when) })).sort((a,b) => a.d - b.d);
+  const card = s => {
+    const expected = (s.batch ? bl(s).filter(b => !batchSel || b === batchSel).flatMap(b => R.batches[b] || []) : R.learners).map(e => e.toLowerCase());
+    const replies = Object.values(latest).filter(r => r["Session ID"] === s.id);
+    const emails = [...new Set([...expected, ...replies.map(r => String(r.Email).toLowerCase())])].filter(e => !R.admins.map(a => a.toLowerCase()).includes(e));
+    const rowOf = e => { const r = latest[e + "|" + s.id]; return { e, r, a: r ? r.Answer : "" }; };
+    const list = emails.map(rowOf).sort((x, y) => ({ no:0, "":1, yes:2 }[x.a] - { no:0, "":1, yes:2 }[y.a]) || x.e.localeCompare(y.e));
+    const n = a => list.filter(x => x.a === a).length;
+    return `<div class="sc"><h3>${esc(s.title)}</h3>
+      <div class="meta">${esc(fmt(s))} · Room: ${s.room ? esc(s.room) : "None"} · Meeting link: ${s.link ? esc(s.link) : "None"}${s.batch ? ` · Batch ${esc(bl(s).join(", "))}` : ""}${s.desc ? `<br>${esc(s.desc)}` : ""}</div>
+      <div class="counts"><span class="pill yes">Yes ${n("yes")}</span><span class="pill no">No ${n("no")}</span><span class="pill none">No reply ${n("")}</span></div>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Reply</th><th>Informed team lead</th><th>Message to trainer</th><th>When</th></tr></thead><tbody>
+      ${list.map(({ e, r, a }) => `<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${a ? `<span class="pill ${a}">${a === "yes" ? "Yes" : "No"}</span>` : '<span class="pill none">No reply yet</span>'}</td><td>${a === "no" ? (r["Informed TL"] === "Yes" ? "Yes" : "—") : ""}</td><td>${esc(String(r && r.Note || "").replace(/^'/, ""))}</td><td class="small muted">${r ? esc(when(r.Timestamp)) : ""}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No onboardees on the list.</td></tr>'}
+      </tbody></table></div></div>`;
+  };
+  const up = sessions.filter(s => new Date(s.d.getTime() + (s.minutes||60)*60000) >= now), past = sessions.filter(s => !up.includes(s));
+  $("app").innerHTML = `<h1>Sessions</h1>
+    <p class="lead">Who said Yes or No to each live or self-paced session. New sessions show up here once they are added to <code>LMS_SESSIONS</code> in modules.js.</p>
+    ${noReplies ? '<p class="muted" style="margin:0 0 12px">Replies couldn\'t be loaded (the Sheet didn\'t answer, or Code.gs needs redeploying), so everyone shows as "No reply yet".</p>' : ""}
+    <div class="bar" style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="refresh">Refresh</button><label class="small muted">Batch <select id="bsel" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px"><option value="">All batches</option>${allBatches.map(b => `<option value="${esc(b)}" ${b === batchSel ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label></div>
+    <h2 class="sec">Upcoming</h2>${up.map(card).join("") || '<p class="muted">No upcoming sessions.</p>'}
+    ${past.length ? `<h2 class="sec">Past</h2>${past.map(card).join("")}` : ""}`;
+  $("refresh").onclick = load;
+  $("bsel").onchange = e => { batchSel = e.target.value; render(rows); };
+}
+
+if (LMS.requireSignIn()) {
+  renderSide("sessions");
+  if (!LMS.isAdmin()) $("app").innerHTML = '<h1>Sessions</h1><p class="muted">This page is for trainers.</p>';
+  else if (!LMS.config.backendUrl) $("app").innerHTML = '<h1>Sessions</h1><p class="muted">The Google Sheet isn\'t connected yet (backendUrl in shared/lms.js).</p>';
+  else load();
+}
+</script>
+</body>
+</html>

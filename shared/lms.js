@@ -265,6 +265,27 @@ window.LMS_CONFIG = {
     loadSettings(){ return send("getSettings", {}, { retry:true }).then(res => { if (res && res.ok) write("settings", res.settings || {}); return res && res.ok ? res.settings : null; }); },
     setSetting(key, value){ return send("setSetting", { key, value }).then(res => { if (res && res.ok) write("settings", { ...(read("settings", {}) || {}), [key]: value }); return res; }); },
 
+    /** Yes/No replies to live sessions: { sessionId: { answer:"yes"|"no", note, informed, at } }. The Sheet's Sessions tab is the source of truth; the browser copy is a cache. */
+    rsvps(){ return read("rsvp." + ((currentUser()||{}).email||""), {}); },
+    saveRsvp(id, answer, note, informed){
+      const all = LMS.rsvps(); all[id] = { answer, note: note || "", informed: !!informed, at: Date.now() };
+      write("rsvp." + ((currentUser()||{}).email||""), all);
+      return send("saveRsvp", { id, answer, note: note || "", informed: !!informed });
+    },
+    syncRsvps(){
+      if (C.demo || !C.backendUrl || !currentUser()) return Promise.resolve(false);
+      return send("myRsvps", {}, { retry:true }).then(res => {
+        if (!res || !res.ok) return false;
+        const local = LMS.rsvps(), merged = { ...(res.rsvps || {}) }, now = Date.now();
+        Object.entries(local).forEach(([id, r]) => { if (now - (r.at || 0) < 60000) merged[id] = r; });   // very recent local reply the Sheet may not have yet
+        const changed = JSON.stringify(merged) !== JSON.stringify(local);
+        write("rsvp." + currentUser().email, merged);
+        return changed;
+      }).catch(() => false);
+    },
+    /** Admin only: every reply (all rows of the Sessions tab). */
+    adminRsvps(){ return send("adminRsvps", {}, { retry:true }); },
+
     adminData(passcode){ return send("adminData", { passcode }, { retry:true }); },
 
     signOut(){
