@@ -78,6 +78,14 @@
   .days{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:18px}
   .days button{display:flex;flex-direction:column;justify-content:flex-start;align-items:flex-start;border:1px solid var(--line);background:#fff;border-radius:12px;padding:12px 12px;text-align:left;font:inherit;color:var(--ink)}
   .days button[aria-pressed="true"]{background:var(--deep);color:#fff;border-color:var(--deep)}
+  .finder{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .finder label{font-weight:700;font-size:14px}
+  .finder select{padding:10px 14px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;min-width:260px;background:#fff}
+  .fres{display:none;background:var(--teal-soft);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:14px}
+  .fres .chip{display:inline-block;margin:0 4px 0 6px;padding:2px 10px;border-radius:20px;background:var(--deep);color:#fff;font-size:12.5px;font-weight:700}
+  .fres .note{margin-top:6px;color:var(--ink-2)}
+  .days button.dim{opacity:.4}
+  .days span.hit{font-weight:800;opacity:1;text-decoration:underline}
   .days b{display:block;font-size:14px;margin-bottom:6px}
   .days span{display:block;font-size:12px;line-height:1.4;opacity:.85}
   .seat{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:#fff}
@@ -188,16 +196,36 @@ function headcount() {
 const jargon = () => D2.map(g => `<div class="jg"><h2>${esc(g.group)}</h2>${
   g.rows ? g.rows.map(r => `<div class="jrow" style="--n:${r.length}">${r.map(tile).join("")}</div>`).join("")
          : `<div class="jrow auto">${g.terms.map(tile).join("")}</div>`}</div>`).join("");
-const D2 = window.DEPT_JARGON, SCH = window.DEPT_SCHEDULE;
+const D2 = window.DEPT_JARGON, SCH = window.DEPT_SCHEDULE, FND = window.DEPT_FINDER;
 
+let schDay = 0;
 function schedule() {
-  const jsDay = new Date().getDay(), start = jsDay >= 1 && jsDay <= 5 ? jsDay - 1 : 0;
-  return `<p class="lead">Acquisition teams in the office each weekday, with the seat plan for that day. Pick a day.</p>
-    <div class="days">${SCH.map((d, i) => `<button data-i="${i}" aria-pressed="${i == start}"><b>${d.day}</b>${d.teams.map(t => `<span>${esc(t)}</span>`).join("")}</button>`).join("")}</div>
-    <div class="seat"><img id="seatimg" alt="" src="department/seatplan/${SCH[start].key}.png"><div class="cap"><span id="seatcap">${SCH[start].day} seat plan</span><span>Click the picture to zoom</span></div></div>
+  const jsDay = new Date().getDay();
+  schDay = jsDay >= 1 && jsDay <= 5 ? jsDay - 1 : 0;
+  return `<p class="lead">Which teams are in the office each weekday, with the seat plan for that day.</p>
+    <div class="finder"><label for="wf">Find a team</label><select id="wf">${FND.map((f, i) => `<option value="${i}">${esc(f.label)}</option>`).join("")}</select></div>
+    <div class="fres" id="fres"></div>
+    <div class="days">${SCH.map((d, i) => `<button data-i="${i}"><b>${d.day}</b>${d.teams.map(t => `<span data-t="${esc(t)}">${esc(t)}</span>`).join("")}</button>`).join("")}</div>
+    <div class="seat"><img id="seatimg" alt="" src=""><div class="cap"><span id="seatcap"></span><span>Click the picture to zoom</span></div></div>
     <div class="lb" id="lb"><img id="lbimg" alt=""></div>`;
 }
+function applyFinder() {
+  const f = FND[document.getElementById("wf").value], res = document.getElementById("fres");
+  const hits = SCH.map(d => f.find ? d.teams.filter(t => t.startsWith(f.find)) : []);
+  document.querySelectorAll(".days button").forEach((b, i) => {
+    b.classList.toggle("dim", !!f.find && !hits[i].length);
+    b.querySelectorAll("span").forEach(s => s.classList.toggle("hit", !!f.find && s.dataset.t.startsWith(f.find)));
+  });
+  const days = SCH.filter((d, i) => hits[i].length).map(d => d.day);
+  let h = "";
+  if (f.find) h += days.length ? `<b>${esc(f.label)}</b> office days: ${days.map(d => `<span class="chip">${d}</span>`).join("")}` : `<b>${esc(f.label)}</b> has no fixed office days.`;
+  if (f.note) h += `<div class="note">${esc(f.note)}</div>`;
+  res.innerHTML = h;
+  res.style.display = h ? "block" : "none";
+  if (f.find && days.length && !hits[schDay].length) pickDay(SCH.findIndex((d, i) => hits[i].length));
+}
 function pickDay(i) {
+  schDay = +i;
   document.querySelectorAll(".days button").forEach(b => b.setAttribute("aria-pressed", b.dataset.i == i));
   document.getElementById("seatimg").src = "department/seatplan/" + SCH[i].key + ".png";
   document.getElementById("seatcap").textContent = SCH[i].day + " seat plan";
@@ -233,6 +261,8 @@ if (LMS.requireSignIn()) {
   document.querySelectorAll(".ptabs button").forEach(b => b.onclick = () => panel(b.dataset.p));
   document.getElementById("jq").addEventListener("input", e => filterJargon(e.target.value));
   document.querySelectorAll(".days button").forEach(b => b.onclick = () => pickDay(b.dataset.i));
+  document.getElementById("wf").addEventListener("change", applyFinder);
+  pickDay(schDay);
   const lb = document.getElementById("lb");
   document.getElementById("seatimg").onclick = e => { document.getElementById("lbimg").src = e.target.src; lb.style.display = "block"; };
   lb.onclick = () => lb.style.display = "none";
