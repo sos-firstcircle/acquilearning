@@ -97,7 +97,7 @@ function doPost(e) {
       }
       const pct = p.max ? Math.round((p.score / p.max) * 1000) / 10 : "";
       const gsh = sheet_(GRADES_SHEET, GRADES_HEADER); ensureColumn_(gsh, "Items");
-      const items = /^\{[\s\S]*\}$/.test(String(p.items || "")) ? String(p.items).length <= 45000 ? String(p.items) : "";   // JSON only
+      const items = /^\{[\s\S]*\}$/.test(String(p.items || "")) && String(p.items).length <= 45000 ? String(p.items) : "";   // JSON only
       appendByHeader_(gsh, { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Exam ID": p.id, "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Items": items });
       if (EXAM_TABS[p.id]) appendByHeader_(sheet_(EXAM_TABS[p.id], EXAM_TAB_HEADERS[p.id] || EXAM_TAB_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Breakdown": p.breakdown || "", "Notes": p.notes || "" });
       return json_({ ok: true });
