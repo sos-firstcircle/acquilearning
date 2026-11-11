@@ -54,7 +54,7 @@ const RETAKE_BATCHES = ["000001", "000002"];
 
 const GRADES_SHEET = "Grades";      // one row per scored attempt
 const PROGRESS_SHEET = "Progress";  // one row per completed task/lesson
-const GRADES_HEADER = ["Timestamp", "Email", "Name", "Batch", "Exam ID", "Attempt", "Score", "Max", "Percent", "Passed", "Details"];
+const GRADES_HEADER = ["Timestamp", "Email", "Name", "Batch", "Exam ID", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Items"];   // Items = per-question answers (JSON) for the Grades page charts
 const PROGRESS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Item ID"];
 // Exams that also get their own tab (in addition to the Grades row). Exam ID -> tab name.
 const EXAM_TABS = { "d1-exam-responsible-selling": "D1-1", "d4-exam-connect-sim": "D4-1" };
@@ -96,9 +96,24 @@ function doPost(e) {
         return json_({ ok: false, error: "already-taken" });
       }
       const pct = p.max ? Math.round((p.score / p.max) * 1000) / 10 : "";
-      appendByHeader_(sheet_(GRADES_SHEET, GRADES_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Exam ID": p.id, "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "" });
+      const gsh = sheet_(GRADES_SHEET, GRADES_HEADER); ensureColumn_(gsh, "Items");
+      const items = /^\{[\s\S]*\}$/.test(String(p.items || "")) ? String(p.items).length <= 45000 ? String(p.items) : "";   // JSON only
+      appendByHeader_(gsh, { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Exam ID": p.id, "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Items": items });
       if (EXAM_TABS[p.id]) appendByHeader_(sheet_(EXAM_TABS[p.id], EXAM_TAB_HEADERS[p.id] || EXAM_TAB_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Breakdown": p.breakdown || "", "Notes": p.notes || "" });
       return json_({ ok: true });
+    }
+    if (req.action === "backfillItems") {   // answers kept in the person's browser from before the Items column existed
+      const txt = String(p.items || "");
+      if (!p.id || !/^\{[\s\S]*\}$/.test(txt) || txt.length > 45000) throw new Error("bad-items");
+      const sh = sheet_(GRADES_SHEET, GRADES_HEADER); ensureColumn_(sh, "Items");
+      const v = sh.getDataRange().getValues(), h = v[0], cE = h.indexOf("Email"), cX = h.indexOf("Exam ID"), cI = h.indexOf("Items");
+      let filled = false;
+      for (let r = v.length - 1; r >= 1 && cI > -1; r--) {      // the person's latest attempt for this exam
+        if (String(v[r][cE]).toLowerCase() !== user.email || String(v[r][cX]) !== String(p.id)) continue;
+        if (!v[r][cI]) { sh.getRange(r + 1, cI + 1).setValue(txt); filled = true; }
+        break;
+      }
+      return json_({ ok: true, filled: filled });
     }
     if (req.action === "complete") {
       appendByHeader_(sheet_(PROGRESS_SHEET, PROGRESS_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Item ID": p.id });
@@ -133,7 +148,7 @@ function doPost(e) {
       return json_({ ok: true, done: Object.keys(done).filter(function (id) { return !results[id]; }), results: results });
     }
     if (req.action === "myGrades") {
-      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(function (r) { return String(r.Email).toLowerCase() === user.email; }) });
+      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(function (r) { return String(r.Email).toLowerCase() === user.email; }).map(function (r) { delete r.Items; return r; }) });
     }
     if (req.action === "adminData") {
       if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
@@ -255,6 +270,12 @@ function verifyToken_(token) {
 function appendByHeader_(sh, obj) {
   const headers = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
   sh.appendRow(headers.map(function (h) { return obj.hasOwnProperty(h) ? obj[h] : ""; }));
+}
+
+/** Add a column to the end of row 1 if the tab doesn't have it yet. */
+function ensureColumn_(sh, name) {
+  const headers = sh.getRange(1, 1, 1, Math.max(sh.getLastColumn(), 1)).getValues()[0];
+  if (headers.indexOf(name) === -1) sh.getRange(1, headers.length + 1).setValue(name);
 }
 
 /** Read every row as an object keyed by the column names in row 1. */

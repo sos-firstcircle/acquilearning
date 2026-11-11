@@ -34,6 +34,12 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - Existing AMs: batch `000002` (acquisitiongroup@firstcircle.com, can retake) gets a one-screen dashboard of lectures, simulations and practice exams instead of the 10-day path: `existing/sections.js` (items), `renderExisting()` in `dashboard.html`, hover thumbnails in `existing/thumbs/`. `LMS.isExisting()` switches it on.
 - `department.html`: visible to everyone, "Coming soon" (internal jargon, team directory, ways of working).
 
+## Grades page charts (admins)
+- `grades.html` has "Overall" (average best score per exam) and "Per question" charts. Per question uses the `Items` column of the Grades tab: a JSON record sent with each attempt (`items` in `LMS.saveResult`).
+- Product Knowledge 1-3: `Items` = `{"section.question": [points, answer]}`, keyed by position in the questions file (not the shuffled order). Add new questions at the END of a section, or old answers line up with the wrong question.
+- Connect sim: `Items` = `{sim:1, secs, tasks:{id:{title, pts, max, st, secs, crit, items}}}` (time per request and every scored check).
+- Older attempts: lms.js sends the answers kept in the person's browser once (`backfillItems`, stored as `{rev:[[question text, points, answer text]]}`); the Grades page matches them back by question text.
+
 ## Progress storage
 - The Google Sheet is the source of truth for progress and grades; the browser copy (localStorage `amacademy`) is a cache. On every page load `LMS.ready = sync()` calls the script's `myProgress` action and merges the result in (so progress follows a person to any browser). Pages that decide on "already taken" wait on `LMS.ready`.
 - Completions go to the `Progress` tab; unticks are logged as a row whose Item ID is `UNDO:<id>` (latest row per item wins). Scored attempts go to `Grades` (and per-exam tabs).

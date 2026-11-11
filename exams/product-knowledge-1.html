@@ -87,7 +87,7 @@ let Q = [], answers = [], cur = 0, started = false;
 /* New attempt: shuffle the questions inside each section (sections stay in order) and the answer order of every question. */
 function build(){
   Q = [];
-  EX.sections.forEach((s, si) => shuffle(s.questions).forEach(q => Q.push({ ...q, si, order: (q.type === "single" || q.type === "multi") ? shuffle(q.options.map((_, i) => i)) : (q.options || []).map((_, i) => i) })));
+  EX.sections.forEach((s, si) => shuffle(s.questions.map((q, qi) => ({ ...q, qi }))).forEach(q => Q.push({ ...q, si, order: (q.type === "single" || q.type === "multi") ? shuffle(q.options.map((_, i) => i)) : (q.options || []).map((_, i) => i) })));
   answers = Q.map(q => q.type === "multi" ? [] : q.type === "text" ? "" : null);
   cur = 0;
 }
@@ -190,7 +190,9 @@ async function submit(){
   $("submit").disabled = true; $("submit").textContent = "Submitting…";
   const g = grade();
   const breakdown = g.rows.map(r => `Q${r.n} (S${r.sec}) ${r.ok === null ? "not scored" : r.ok ? "correct" : fmt(r.pts) + "/" + fmt(r.max) + " (answered: " + r.mine + "; correct: " + r.right + ")"}`).join("\n");
-  try { await LMS.saveResult(EX.id, { score: g.score, max: g.max, passed: g.passed, details: g.notes, breakdown, notes: g.notes }); } catch (e) {}
+  /* Per-question record for the Grades page charts. Key = section.question as written in the questions file (not the shuffled order): [points, answer]. */
+  const items = {}; Q.forEach((q, i) => { items[q.si + "." + q.qi] = [earned(i), q.type === "multi" ? answers[i].slice().sort((x, y) => x - y) : q.type === "text" ? digitsOf(answers[i]) : answers[i]]; });
+  try { await LMS.saveResult(EX.id, { score: g.score, max: g.max, passed: g.passed, details: g.notes, breakdown, notes: g.notes, items: JSON.stringify(items) }); } catch (e) {}
   if (!PREVIEW) LMS.saveReview(EX.id, g);
   results(g);
 }

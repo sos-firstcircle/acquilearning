@@ -1720,6 +1720,7 @@ function clientSays(html, delay=0){ setTimeout(()=>{ if(!EX.finished) addMsg(htm
 
 function showTask(i){
   const t=TASKS[i]; if(!t) return;
+  (EX.tStart=EX.tStart||{})[t.id]=elapsed();          // when the request came in (for time per request on the Grades page)
   t.messages.forEach((m,k)=>clientSays(m, 400+k*900));
   setTimeout(()=>{
     if(EX.finished) return;
@@ -1738,7 +1739,7 @@ $("#chatBody").addEventListener("click", e=>{ if(!e.target.closest("[data-dlcheq
   chequeNames().forEach((nm,i)=>setTimeout(()=>{ const a=document.createElement("a"); a.href="connect-cheque.jpg"; a.download=nm; document.body.appendChild(a); a.click(); a.remove(); }, i*350));
   logAction("drawdown","Downloaded the cheque photos"); });
 function closeTask(i, status){
-  const t=TASKS[i]; EX.status[t.id]=status;
+  const t=TASKS[i]; EX.status[t.id]=status; (EX.tEnd=EX.tEnd||{})[t.id]=elapsed();
   const card=$("#card-"+t.id);
   if(card){ card.querySelector(".tc-actions").remove(); const tag=card.querySelector(".tag"); tag.textContent=status==="done"?"Done":status==="skipped"?"Skipped":"Not in this build"; tag.className="tag "+(status==="done"?"done":status==="skipped"?"skip":""); }
   updateProgress();
@@ -1973,7 +1974,11 @@ function finish(timeUp){
   const nt=buildNotes(res,total,max,pass,timeUp), breakdown=buildBreakdown(res), notesTxt=nt.head+"\n"+nt.notes.map(n=>"- "+n).join("\n");
   EX.results={res,total,max,pass,timeUp,nt,breakdown};
   // Record the result for the signed-in AM (Grades sheet + the D4-1 tab, with the breakdown and notes).
-  try { LMS.saveResult(EXAM_ID, { score:total, max, passed:pass, details:`${anyCrit?"critical error; ":""}${timeUp?"time ran out; ":""}time used ${mmss(Math.min(elapsed(),EXAM_MINUTES*60))}`, breakdown, notes:notesTxt }); } catch(e){}
+  /* Per-request record for the Grades page charts: points, status, seconds spent, and every scored check (label, ok, points, max, expected, saved). */
+  const cut=v=>String(v==null?"":v).slice(0,80), tS=EX.tStart||{}, tE=EX.tEnd||{}, items={sim:1, secs:Math.min(elapsed(),EXAM_MINUTES*60), tasks:{}};
+  scored.forEach(r=>{ const id=r.task.id; items.tasks[id]={ title:r.task.title, pts:r.pts, max:r.max, st:r.status, secs:tS[id]==null?null:Math.max(0,(tE[id]==null?elapsed():tE[id])-tS[id]),
+    crit:r.critical.map(cut), items:r.items.filter(i=>i.max>0).map(i=>[i.label, i.ok?1:0, r.status==="skipped"?0:i.pts, i.max, cut(i.expected), cut(i.actual)]) }; });
+  try { LMS.saveResult(EXAM_ID, { score:total, max, passed:pass, details:`${anyCrit?"critical error; ":""}${timeUp?"time ran out; ":""}time used ${mmss(Math.min(elapsed(),EXAM_MINUTES*60))}`, breakdown, notes:notesTxt, items:JSON.stringify(items) }); } catch(e){}
   const rows=scored.map(r=>{
     const status=r.status==="skipped"?'<span class="tag skip">Skipped</span>':r.status==="done"?'<span class="tag done">Marked done</span>':'<span class="tag">Not marked done</span>';
     const detail=r.items.map(it=>`<tr><td style="padding-left:18px">${it.ok?'<span class="check">✓</span>':'<span class="cross">✗</span>'} ${it.label}</td><td>${esc(it.expected)}</td><td>${esc(it.actual)}</td><td>${r.status==="skipped"?0:it.pts}/${it.max}</td></tr>`).join("");

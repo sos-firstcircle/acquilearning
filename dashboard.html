@@ -175,7 +175,7 @@ function compute(){
       return { ...d, empty:true, tasksDone:0, status, catchUp };
     }
     const tasksDone = d.tasks.filter(t => done(t.id)).length;
-    const examDone = d.exams.every(e => e.soon || done(e.id));   // exams marked soon (no questions yet) do not block the day
+    const examDone = d.exams.every(e => (e.soon && !e.blocks) || done(e.id));   // exams marked soon (no questions yet) do not block the day unless blocks:true
     const complete = manual || (tasksDone === d.tasks.length && examDone);
     const status = complete ? "complete" : (prevComplete || catchUp) ? "current" : "locked";
     if (status === "current" && current === null) current = d.day;
@@ -217,7 +217,7 @@ function dropdown(sel, P){
       ? `<li><a ${m.dl?'class="dl"':m.link?'class="lk"':""} href="${esc(m.href)}" ${m.download?`download="${esc(m.download)}"`:""} target="${(m.dl||/^https?:/.test(m.href))?"_blank":"_self"}" rel="noopener">${esc(m.label)}</a></li>`
       : `<li><span>${esc(m.label)}</span><span class="soon">Link coming soon</span></li>`).join("")}</ul>` : "";
   const examCard = e => {
-    if (e.soon) return `<div class="exam" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--marigold-soft)"><div><b>${esc(e.label)}</b><br><span class="small muted">Questions coming soon.</span></div><span class="pillsoon">Soon</span></div>`;
+    if (e.soon) return `<div class="exam" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--marigold-soft)"><div><b>${esc(e.label)}</b><br><span class="small muted">${e.desc ? esc(e.desc) : "Questions coming soon."}</span></div><span class="pillsoon">Soon</span></div>`;
     const rec = P[e.id], sub = rec && rec.status === "done";
     const scoreTxt = rec && rec.max ? `Score: ${rec.score}/${rec.max}` : (e.kind==="trainer" ? "Scored live by your trainer." : "");
     if (sub) return `<div class="exam ok" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--green-soft)"><div><b>${ico("check",14)} ${esc(e.label)} done</b><br><span class="small muted">${scoreTxt}</span></div>${(e.kind==="lms"||e.kind==="sim")&&e.href?`<div style="display:flex;gap:8px;flex-wrap:wrap">${e.kind==="lms"&&!LMS.canReview()?"":`<a class="btn sm" href="${esc(e.href)}${e.kind==="lms"?(e.href.includes("?")?"&":"?")+"review=1":""}">${e.kind==="sim"?"Review your result":"Review your answers"}</a>`}${LMS.canRetake()?`<a class="btn sm primary" href="${esc(e.href)}${e.kind==="lms"?(e.href.includes("?")?"&":"?")+"retake=1":""}">Retake</a>`:""}</div>`:""}</div>`;

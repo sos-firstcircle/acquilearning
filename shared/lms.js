@@ -267,7 +267,7 @@ window.LMS_CONFIG = {
       p[id] = rec;
       write(progressKey(), p);
       const honor = LMS.honorRequired() && LMS.honorName ? "Honor code: " + LMS.honorName + (result.details ? " | " : "") : "";
-      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "" });
+      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "", items:result.items || "" });
       return Promise.resolve(p[id]);
     },
 
@@ -327,5 +327,13 @@ window.LMS_CONFIG = {
   });
   LMS.settingsDone = currentUser() ? LMS.loadSettings() : Promise.resolve(null);   // trainer name etc. (cached for next time)
   LMS.syncDone = sync();    // resolves (true if anything changed) whenever the Sheet answers, however long it takes
+  /* Attempts taken before per-question answers were recorded: this browser still holds the person's answers (kept for "Review answers").
+     Send them up once so the Grades page charts can include them. The server only fills a Grades row whose Items cell is empty. */
+  LMS.syncDone.then(() => { const u = currentUser(); if (!u || !u.email || !LMS.config.backendUrl || isPreview()) return;
+    ["d3-exam-product-knowledge-1", "exam-product-knowledge-2", "exam-product-knowledge-3"].forEach(id => {
+      const g = LMS.getReview(id), flag = "itemsSent." + u.email + "." + id;
+      if (!g || !Array.isArray(g.rows) || read(flag, false)) return;
+      Promise.resolve(send("backfillItems", { id, items: JSON.stringify({ rev: g.rows.map(r => [r.q, r.pts, r.mine]) }) })).then(res => { if (res && res.ok) write(flag, true); }).catch(() => {});
+    }); }).catch(() => {});
   LMS.ready = Promise.race([LMS.syncDone, new Promise(r => setTimeout(() => r(false), 8000))]);   // pages that must wait on the Sheet wait at most 8s
 })();

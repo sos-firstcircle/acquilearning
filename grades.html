@@ -26,6 +26,26 @@
   .gate form{display:flex;gap:8px}.gate input{flex:1;min-width:0}
   .err{margin-top:12px;color:#8E2A3E;font-size:13px}
   h2.sec{margin:34px 0 10px}
+  /* charts */
+  .ov{display:grid;grid-template-columns:minmax(140px,260px) 1fr auto;gap:8px 14px;align-items:center;font-size:14px;border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 18px}
+  .trk{height:14px;background:var(--mist);border-radius:4px;position:relative;min-width:80px}
+  .trk i{position:absolute;left:0;top:0;bottom:0;background:var(--teal);border-radius:4px}
+  .trk u{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.55}
+  .lg{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--ink-2);margin:0 0 10px}
+  .lg i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .c-ok,.trk i.c-ok{background:#2E7D4F}.c-part{background:#F5B83D}.c-no,.trk i.c-no{background:#E0526B}.c-ns{background:#C9D6D8}
+  .items{border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+  .ih{padding:10px 16px;background:var(--mist);font-size:12px;font-weight:600;color:var(--ink-2)}
+  .it{display:grid;grid-template-columns:44px 1fr 220px 104px;gap:12px;align-items:center;width:100%;padding:9px 16px;border:0;border-top:1px solid var(--line);background:#fff;font:inherit;font-size:14px;color:var(--ink);text-align:left;cursor:pointer}
+  .it:hover{background:var(--mist)} .it b{color:var(--ink-2);font-size:13px}
+  .it .qx{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .it .v{text-align:right;font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-2)}
+  .stk{display:flex;gap:2px;height:14px}.stk i{display:block;height:100%;border-radius:3px;min-width:3px}
+  .idet{padding:14px 16px 18px 72px;border-top:1px solid var(--line);background:#FAFCFC;font-size:14px}
+  .idet .ch{display:grid;grid-template-columns:20px 1fr 160px 70px;gap:10px;align-items:center;padding:5px 0}
+  .idet .ch .v{text-align:right;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .idet .mk{font-weight:700;color:var(--green)}
+  @media (max-width:760px){.it{grid-template-columns:36px 1fr 90px}.it .v{display:none}.idet{padding-left:16px}.idet .ch{grid-template-columns:20px 1fr 60px}.idet .ch .trk{display:none}.ov{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -47,6 +67,17 @@ const nameOf = e => e.split("@")[0].split(/[._-]/).map(w=>w[0].toUpperCase()+w.s
 const pct = r => r.Percent !== "" && r.Percent != null ? Number(r.Percent) : (r.Max ? Math.round(r.Score/r.Max*1000)/10 : null);
 const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : "";
 let DATA = { grades:[], progress:[] };
+/* Exams with a question file: used for the per-question chart. Exam id -> [questions file, global name]. */
+const BANKS = { "d3-exam-product-knowledge-1": ["exams/product-knowledge-1-questions.js", "LMS_PK1"], "exam-product-knowledge-2": ["exams/product-knowledge-2-questions.js", "LMS_PK2"], "exam-product-knowledge-3": ["exams/product-knowledge-3-questions.js", "LMS_PK3"] };
+const SIM_ID = "d4-exam-connect-sim";
+const PASS = {}; (window.LMS_DAYS||[]).forEach(d => (d.exams||[]).forEach(e => { if (e.passing) PASS[e.id] = e.passing; }));
+/* Older attempts were sent up from the person's browser as [question text, points, answer text]. Match them back to the questions file. */
+const fromReview = (bank, rev) => { const out = {}, dg = s => String(s || "").replace(/[^0-9]/g, "");
+  (bank.sections || []).forEach((sec, si) => sec.questions.forEach((q, qi) => { const r = rev.find(x => x[0] === q.q); if (!r) return; const m = String(r[2] == null ? "" : r[2]);
+    out[si + "." + qi] = [r[1], q.type === "text" ? dg(m) : q.type === "multi" ? q.options.map((o, i) => (m === o || m.startsWith(o + "; ") || m.endsWith("; " + o) || m.includes("; " + o + "; ")) ? i : -1).filter(i => i >= 0) : q.options.indexOf(m)]; }));
+  return Object.keys(out).length ? out : null; };
+const loadBank = id => new Promise(res => { const b = BANKS[id]; if (!b) return res(null); if (window[b[1]]) return res(window[b[1]]);
+  const s = document.createElement("script"); s.src = b[0]; s.onload = () => res(window[b[1]] || null); s.onerror = () => res(null); document.head.appendChild(s); });
 
 function gate(msg){
   $("app").innerHTML = `<h1>Grades</h1>
@@ -76,6 +107,7 @@ function render(){
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());
   const allLearners = [...new Set([ ...R.learners.map(e=>e.toLowerCase()), ...g.map(r=>r.Email) ])].filter(e => !admins.includes(e));
   const batches = [...new Set([ ...Object.keys(R.batches), ...g.map(r => r.Batch).filter(Boolean) ])].sort();   // roster batches plus any in the Sheet
+  const keepIx = $("ix") ? $("ix").value : "", keepSort = $("isort") ? $("isort").value : "order";
   const batchSel = $("bf") ? $("bf").value : "", keepQ = $("q") ? $("q").value : "", keepEx = $("ex") ? $("ex").value : "";
   const learners = allLearners.filter(e => !batchSel || bOf(e) === batchSel);
   const exams = [...new Set(g.map(r=>r["Exam ID"]))];
@@ -93,6 +125,14 @@ function render(){
       ${learners.map(e=>`<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(bOf(e)||"—")}</td>${exams.map(x=>`<td>${cell(e,x)}</td>`).join("")}<td>${(prog[e]||new Set()).size}</td></tr>`).join("") || '<tr><td class="muted">No onboardees yet.</td></tr>'}
     </tbody></table></div>
 
+    <h2 class="sec">Overall</h2><p class="muted small" style="margin:0 0 10px">Average best score per exam for the selected batch. The dark line is the pass mark.</p>
+    <div id="overall"></div>
+
+    <h2 class="sec">Per question</h2>
+    <div class="bar" style="margin-top:0"><select id="ix" aria-label="Exam for item chart">${[...Object.keys(BANKS), SIM_ID].map(x=>`<option value="${esc(x)}">${esc(nice(x))}</option>`).join("")}</select>
+      <select id="isort" aria-label="Sort"><option value="order">Exam order</option><option value="missed">Most missed first</option></select></div>
+    <div id="items"></div>
+
     <h2 class="sec">Every attempt</h2>
     <div class="bar"><input id="q" type="search" placeholder="Search name or email" aria-label="Search"><select id="ex" aria-label="Exam"><option value="">All exams</option>${exams.map(x=>`<option value="${esc(x)}">${esc(nice(x))}</option>`).join("")}</select></div>
     <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Onboardee</th><th>Batch</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></div>`;
@@ -105,6 +145,84 @@ function render(){
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;
   $("q").oninput = draw; $("ex").onchange = draw; draw();
+  /* ---- Overall: average best score per exam ---- */
+  const inBatch = r => !batchSel || (r.Batch || bOf(r.Email)) === batchSel;
+  const ov = exams.map(x => { const rs = Object.values(best).filter(r => r["Exam ID"] === x && inBatch(r) && !admins.includes(r.Email) && r.p != null);
+    return { x, n: rs.length, avg: rs.length ? Math.round(rs.reduce((n, r) => n + r.p, 0) / rs.length) : null, pass: rs.filter(r => r.Passed === "Yes").length }; }).filter(o => o.n);
+  $("overall").innerHTML = ov.length ? `<div class="ov">${ov.map(o => { const pm = PASS[o.x];
+    return `<div>${esc(nice(o.x))}</div><div class="trk" title="Average ${o.avg}%${pm ? ", pass mark " + pm + "%" : ""}"><i style="width:${Math.min(100, o.avg)}%"></i>${pm ? `<u style="left:${pm}%"></u>` : ""}</div><div class="small muted">Average ${o.avg}% · ${o.pass} of ${o.n} passed</div>`; }).join("")}</div>` : '<p class="muted">No scores yet for this batch.</p>';
+
+  /* ---- Per question: each person's first attempt that has per-question answers ---- */
+  const drawItems = async () => {
+    const x = $("ix").value, isSim = x === SIM_ID, bank = isSim ? {} : await loadBank(x);
+    $("isort").hidden = isSim;
+    if ($("ix").value !== x) return;
+    if (!bank) { $("items").innerHTML = '<p class="muted">Couldn\'t load the questions for this exam.</p>'; return; }
+    const first = {}; g.filter(r => r["Exam ID"] === x && inBatch(r) && !admins.includes(r.Email)).sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp)))
+      .forEach(r => { if (first[r.Email]) return; let it = null; try { it = JSON.parse(r.Items || ""); } catch (e) {} if (it && it.rev) it = fromReview(bank, it.rev); if (it && typeof it === "object") first[r.Email] = { who: r.Name || nameOf(r.Email), it }; });
+    const att = Object.values(first), noData = g.filter(r => r["Exam ID"] === x && inBatch(r) && !r.Items).length;
+    /* People in the selected batch with no per-question record yet: not taken, or taken before answers were recorded. */
+    const pendAll = batchSel ? learners.filter(e => !first[e]) : [], notYet = pendAll.filter(e => !best[e + "|" + x]), oldOnes = pendAll.filter(e => best[e + "|" + x]);
+    const pn = pendAll.length, pendSeg = pn ? `<i class="c-ns" style="flex:${pn}" title="${pn} no answers yet"></i>` : "";
+    const pendHtml = (notYet.length ? `<p class="small" style="margin:0 0 6px"><b>Not yet taken (${notYet.length}):</b> ${esc(notYet.map(nameOf).join(", "))}</p>` : "") + (oldOnes.length ? `<p class="small" style="margin:0 0 6px"><b>Taken before answers were recorded (${oldOnes.length}):</b> ${esc(oldOnes.map(nameOf).join(", "))}</p>` : "");
+    const pendLg = pn ? '<span><i class="c-ns"></i>No answers yet</span>' : "";
+    if (!att.length) { $("items").innerHTML = `${pendHtml}<p class="muted">No per-question answers yet for this exam${batchSel ? " in batch " + esc(batchSel) : ""}. ${noData ? noData + " earlier attempt" + (noData > 1 ? "s were" : " was") + " taken before answers were recorded per question, so only the total score is known." : ""}</p>`; return; }
+    const names = l => l.length ? esc(l.map(a => a.who).join(", ")) : "nobody";
+    if (isSim) return drawSim(att, names, { pendSeg, pendHtml, pendLg, total: att.length + pn });
+    let n = 0; const qs = [];
+    bank.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => {
+      const sc = q.answer !== null && q.answer !== undefined, max = !sc ? 0 : q.type === "multi" ? q.answer.length * 0.5 : (q.points || 1);
+      const recs = att.map(a => ({ who: a.who, r: a.it[si + "." + qi] })).filter(a => Array.isArray(a.r));
+      const ok = recs.filter(a => sc && a.r[0] >= max).length, no = recs.filter(a => sc && !a.r[0]).length, part = sc ? recs.length - ok - no : 0;
+      qs.push({ n: ++n, si, sec, q, sc, max, recs, ok, part, no, rate: sc && recs.length ? ok / recs.length : null });
+    }));
+    const list = $("isort").value === "missed" ? qs.slice().sort((a, b) => (a.rate == null ? 2 : a.rate) - (b.rate == null ? 2 : b.rate) || a.n - b.n) : qs;
+    const seg = (c, v, t) => v ? `<i class="${c}" style="flex:${v}" title="${v} ${t}"></i>` : "";
+    const whoTip = l => esc(l.map(a => a.who).join(", "));
+    const detail = o => { const q = o.q, N = o.recs.length;
+      const row = (mark, label, picked, good) => `<div class="ch"><span class="mk">${mark ? "✓" : ""}</span><span>${esc(label)}</span><span class="trk" title="${whoTip(picked)}"><i class="${good ? "c-ok" : "c-no"}" style="width:${N ? picked.length / N * 100 : 0}%"></i></span><span class="v" title="${whoTip(picked)}">${picked.length} of ${N}</span></div>`;
+      let body;
+      if (q.type === "text") { const t = {}; o.recs.forEach(a => (t[a.r[1] || "(blank)"] = t[a.r[1] || "(blank)"] || []).push(a));
+        const lab = v => v === "(blank)" ? v : (q.fmt === "peso" ? "₱" : "") + Number(v).toLocaleString("en-PH");
+        body = Object.keys(t).sort((a, b) => t[b].length - t[a].length).map(v => row(v === q.answer, lab(v), t[v], v === q.answer)).join("") + (o.sc && !t[q.answer] ? `<div class="small muted" style="margin-top:6px">Correct answer: ${esc(lab(q.answer))}</div>` : "");
+      } else body = (q.options || []).map((opt, oi) => { const good = o.sc && (q.type === "multi" ? q.answer.includes(oi) : q.answer === oi);
+        return row(good, opt, o.recs.filter(a => q.type === "multi" ? (a.r[1] || []).includes(oi) : a.r[1] === oi), good); }).join("");
+      return `<div class="idet"><p style="margin:0 0 4px"><b>${esc(q.q)}</b></p><p class="small muted" style="margin:0 0 8px">${q.type === "multi" ? "Tick all that apply. ✓ marks the right items; the bar shows how many people ticked each one." : q.type === "text" ? "Typed answer. Every different answer people gave." : "✓ marks the right answer; the bar shows how many people picked each choice."} Hover a bar to see who.${o.sc ? "" : " This question is not scored yet (no answer key)."}</p>${body}${o.sc ? `<p class="small" style="margin:12px 0 0"><b>Got it right (${o.ok}):</b> ${names(o.recs.filter(a => a.r[0] >= o.max))}</p>${o.part ? `<p class="small" style="margin:4px 0 0"><b>Partly right (${o.part}):</b> ${names(o.recs.filter(a => a.r[0] > 0 && a.r[0] < o.max))}</p>` : ""}<p class="small" style="margin:4px 0 0"><b>Got it wrong (${o.no}):</b> ${names(o.recs.filter(a => !a.r[0]))}</p>` : ""}${q.why ? `<p class="small muted" style="margin:10px 0 0">Why: ${esc(q.why)}</p>` : ""}</div>`; };
+    let lastSi = -1;
+    $("items").innerHTML = `<div class="lg"><span><i class="c-ok"></i>Correct</span><span><i class="c-part"></i>Partly correct</span><span><i class="c-no"></i>Wrong</span>${pendLg}<span>${pn ? att.length + " of " + (att.length + pn) + " answered so far" : att.length + (att.length === 1 ? " person" : " people")}, first attempt each. Percent is out of those who answered. Click a question for the choices.</span></div>${pendHtml}
+      <div class="items">${list.map(o => { const head = $("isort").value === "order" && o.si !== lastSi ? `<div class="ih">Section ${o.si + 1}: ${esc(o.sec.title)}</div>` : ""; lastSi = o.si;
+        return `${head}<button class="it" data-it="${o.n}" aria-expanded="false" title="${esc(o.q.q)}"><b>Q${o.n}</b><span class="qx">${esc(o.q.q)}</span>
+          <span class="stk">${o.sc ? seg("c-ok", o.ok, "correct") + seg("c-part", o.part, "partly correct") + seg("c-no", o.no, "wrong") + pendSeg : `<i class="c-ns" style="flex:1" title="Not scored"></i>`}</span>
+          <span class="v">${o.rate == null ? "Not scored" : Math.round(o.rate * 100) + "% correct"}</span></button><div id="idet${o.n}" hidden></div>`; }).join("")}</div>`;
+    $("items").querySelectorAll("[data-it]").forEach(b => b.onclick = () => { const d = $("idet" + b.dataset.it), open = d.hidden;
+      if (open && !d.innerHTML) d.innerHTML = detail(qs[b.dataset.it - 1]); d.hidden = !open; b.setAttribute("aria-expanded", open); });
+  };
+  /* Connect simulation: one row per client request (task), then every scored check inside it. */
+  const mmss = s => s == null ? "—" : Math.floor(s / 60) + ":" + String(Math.round(s % 60)).padStart(2, "0");
+  const drawSim = (att, names, P) => {
+    const ids = []; att.forEach(a => Object.keys((a.it.tasks) || {}).forEach(id => { if (!ids.includes(id)) ids.push(id); }));
+    const seg = (c, v, t) => v ? `<i class="${c}" style="flex:${v}" title="${v} ${t}"></i>` : "";
+    const T = ids.map((id, k) => { const recs = att.map(a => ({ who: a.who, t: a.it.tasks[id] })).filter(a => a.t), t0 = recs[0].t, N = recs.length;
+      const full = recs.filter(a => a.t.pts >= a.t.max), zero = recs.filter(a => !a.t.pts), timed = recs.filter(a => a.t.secs != null);
+      return { id, n: k + 1, title: t0.title, max: t0.max, recs, N, full, zero, part: N - full.length - zero.length, avg: Math.round(recs.reduce((n, a) => n + a.t.pts, 0) / N * 10) / 10, time: timed.length ? timed.reduce((n, a) => n + a.t.secs, 0) / timed.length : null }; });
+    const detail = o => { const labels = []; o.recs.forEach(a => (a.t.items || []).forEach(i => { if (!labels.includes(i[0])) labels.push(i[0]); }));
+      const checks = labels.map(l => { const got = o.recs.map(a => ({ who: a.who, i: (a.t.items || []).find(i => i[0] === l) })).filter(a => a.i), ok = got.filter(a => a.i[1]), bad = got.filter(a => !a.i[1]);
+        return `<div class="ch"><span></span><span>${esc(l)} <span class="muted small">(${got[0].i[3]} pt${got[0].i[3] === 1 ? "" : "s"})</span>${bad.length ? `<div class="small muted">Wrong: ${bad.map(a => esc(a.who) + " (expected " + esc(a.i[4]) + ", saved " + esc(a.i[5]) + ")").join("; ")}</div>` : ""}</span><span class="trk" title="Right: ${names(ok)}"><i class="c-ok" style="width:${ok.length / got.length * 100}%"></i></span><span class="v">${ok.length} of ${got.length} right</span></div>`; }).join("");
+      const crit = o.recs.filter(a => (a.t.crit || []).length);
+      const ppl = o.recs.slice().sort((a, b) => a.t.pts - b.t.pts).map(a => `<tr><td>${esc(a.who)}</td><td>${a.t.pts}/${a.t.max}</td><td>${mmss(a.t.secs)}</td><td>${a.t.st === "skipped" ? "Skipped" : a.t.st === "done" ? "Marked done" : "Not marked done"}${(a.t.crit || []).length ? " · critical error" : ""}</td></tr>`).join("");
+      return `<div class="idet"><p style="margin:0 0 8px"><b>${esc(o.title)}</b> <span class="muted small">${o.max} points</span></p>${checks}
+        ${crit.length ? `<p class="small" style="margin:10px 0 0"><b>Critical errors (task scores 0):</b> ${crit.map(a => esc(a.who) + ": " + esc(a.t.crit.join(" "))).join("; ")}</p>` : ""}
+        <table class="tbl" style="margin-top:12px;font-size:13px"><thead><tr><th>Onboardee</th><th>Points</th><th>Time spent</th><th>Status</th></tr></thead><tbody>${ppl}</tbody></table></div>`; };
+    const tot = att.filter(a => a.it.secs != null);
+    $("items").innerHTML = `<div class="lg"><span><i class="c-ok"></i>Full points</span><span><i class="c-part"></i>Some points</span><span><i class="c-no"></i>Zero</span>${P.pendLg}<span>${P.total > att.length ? att.length + " of " + P.total + " done so far" : att.length + (att.length === 1 ? " person" : " people")}, first attempt each${tot.length ? ". Average total time " + mmss(tot.reduce((n, a) => n + a.it.secs, 0) / tot.length) : ""}. Click a request for the checks.</span></div>${P.pendHtml}
+      <div class="items">${T.map(o => `<button class="it" data-it="${o.n}" aria-expanded="false" title="${esc(o.title)}"><b>R${o.n}</b><span class="qx">${esc(o.title)}</span>
+        <span class="stk">${seg("c-ok", o.full.length, "full points") + seg("c-part", o.part, "some points") + seg("c-no", o.zero.length, "zero") + P.pendSeg}</span>
+        <span class="v" title="Average points · average time">${o.avg}/${o.max} · ${mmss(o.time)}</span></button><div id="idet${o.n}" hidden></div>`).join("")}</div>`;
+    $("items").querySelectorAll("[data-it]").forEach(b => b.onclick = () => { const d = $("idet" + b.dataset.it), open = d.hidden;
+      if (open && !d.innerHTML) d.innerHTML = detail(T[b.dataset.it - 1]); d.hidden = !open; b.setAttribute("aria-expanded", open); });
+  };
+  if ([...$("ix").options].some(o => o.value === keepIx)) $("ix").value = keepIx; $("isort").value = keepSort;
+  $("ix").onchange = drawItems; $("isort").onchange = drawItems; drawItems();
   $("bf").onchange = render;
   $("refresh").onclick = () => load(sessionStorage.getItem("amhub.adminpc") || "");
 }

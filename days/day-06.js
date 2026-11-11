@@ -1,7 +1,11 @@
 /* Day 6. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[6] = {
   title: "Acqui Service Training",
-  brief: "Hands-on training in Acqui Service.",
-  tasks: [],
+  // TODO: replace with the real Day 6 content (batch 110926 falls on a holiday, so this is only a note for now).
+  brief: "Please contact your training manager (Reyster) for what to expect.",
+  // One tickable task so the day can still be completed and Days 7-10 do not stay locked.
+  tasks: [
+    { id: "d6-message-reyster", label: "Message Reyster (Training Manager) about what to expect" }
+  ],
   materials: []
 };
