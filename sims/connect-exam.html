@@ -1978,10 +1978,10 @@ function finish(timeUp){
   const cut=v=>String(v==null?"":v).slice(0,80), tS=EX.tStart||{}, tE=EX.tEnd||{}, items={sim:1, secs:Math.min(elapsed(),EXAM_MINUTES*60), tasks:{}};
   scored.forEach(r=>{ const id=r.task.id; items.tasks[id]={ title:r.task.title, pts:r.pts, max:r.max, st:r.status, secs:tS[id]==null?null:Math.max(0,(tE[id]==null?elapsed():tE[id])-tS[id]),
     crit:r.critical.map(cut), items:r.items.filter(i=>i.max>0).map(i=>[i.label, i.ok?1:0, r.status==="skipped"?0:i.pts, i.max, cut(i.expected), cut(i.actual)]) }; });
-  /* Mistakes for the Grades sheet: "Task - subtask" for every wrong check, separated by commas. */
-  const wrongList=[]; scored.forEach(r=>{ if(r.status==="skipped"){ wrongList.push(r.task.title+" - skipped"); return; }
-    const w=r.items.filter(i=>i.max>0&&!i.ok); w.forEach(i=>wrongList.push(r.task.title+" - "+i.label)); if(!w.length&&r.critical.length) wrongList.push(r.task.title+" - critical error"); });
-  try { LMS.saveResult(EXAM_ID, { score:total, max, passed:pass, details:`${anyCrit?"critical error; ":""}${timeUp?"time ran out; ":""}time used ${mmss(Math.min(elapsed(),EXAM_MINUTES*60))}. ${wrongList.length?"Mistakes: "+wrongList.join(", ")+".":"No mistakes."}`, breakdown, notes:notesTxt, items:JSON.stringify(items) }); } catch(e){}
+  /* Mistakes for the Grades sheet: one line per task, "Task - subtask, subtask." for its wrong checks. */
+  const wrongList=[]; scored.forEach(r=>{ if(r.status==="skipped"){ wrongList.push(r.task.title+" - skipped."); return; }
+    const w=r.items.filter(i=>i.max>0&&!i.ok).map(i=>i.label); if(w.length) wrongList.push(r.task.title+" - "+w.join(", ")+"."); else if(r.critical.length) wrongList.push(r.task.title+" - critical error."); });
+  try { LMS.saveResult(EXAM_ID, { score:total, max, passed:pass, details:(s=>s[0].toUpperCase()+s.slice(1))(`${anyCrit?"critical error; ":""}${timeUp?"time ran out; ":""}time used ${mmss(Math.min(elapsed(),EXAM_MINUTES*60))}.`)+"\n"+(wrongList.length?"Mistakes:\n"+wrongList.join("\n"):"No mistakes."), breakdown, notes:notesTxt, items:JSON.stringify(items) }); } catch(e){}
   const rows=scored.map(r=>{
     const status=r.status==="skipped"?'<span class="tag skip">Skipped</span>':r.status==="done"?'<span class="tag done">Marked done</span>':'<span class="tag">Not marked done</span>';
     const detail=r.items.map(it=>`<tr><td style="padding-left:18px">${it.ok?'<span class="check">✓</span>':'<span class="cross">✗</span>'} ${it.label}</td><td>${esc(it.expected)}</td><td>${esc(it.actual)}</td><td>${r.status==="skipped"?0:it.pts}/${it.max}</td></tr>`).join("");

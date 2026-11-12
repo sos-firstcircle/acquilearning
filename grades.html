@@ -85,14 +85,14 @@ const PROD = Object.keys(BANKS), DEC = "__decision";
    "Per question" chart), not the shuffled order the person saw. Same wording as the exam pages now save. null = nothing to rebuild from. */
 const honorPre = d => { const m = /^Honor code: .*?(?: \| |$)/.exec(String(d || "")); return !m ? "" : / \| $/.test(m[0]) ? m[0] : m[0] + " | "; };
 const noteOf = (r, bank) => { let it = null; try { it = JSON.parse(r.Items || ""); } catch (e) {} if (!it || typeof it !== "object") return null;
-  if (it.sim) { const out = []; Object.values(it.tasks || {}).forEach(t => { if (t.st === "skipped") return out.push(t.title + " - skipped");
-      const w = (t.items || []).filter(i => !i[1]); w.forEach(i => out.push(t.title + " - " + i[0])); if (!w.length && (t.crit || []).length) out.push(t.title + " - critical error"); });
-    const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\.? ?(Mistakes: [\s\S]*|No mistakes\.)$/, "").trim();
-    return (head ? head + ". " : "") + (out.length ? "Mistakes: " + out.join(", ") + "." : "No mistakes."); }
+  if (it.sim) { const out = []; Object.values(it.tasks || {}).forEach(t => { if (t.st === "skipped") return out.push(t.title + " - skipped.");   // one line per task, its wrong checks together
+      const w = (t.items || []).filter(i => !i[1]).map(i => i[0]); if (w.length) out.push(t.title + " - " + w.join(", ") + "."); else if ((t.crit || []).length) out.push(t.title + " - critical error."); });
+    const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\.?\s*(Mistakes:[\s\S]*|No mistakes\.)$/, "").trim();
+    return (head ? head[0].toUpperCase() + head.slice(1) + ".\n" : "") + (out.length ? "Mistakes:\n" + out.join("\n") : "No mistakes."); }
   if (!bank) return null; if (it.rev) it = fromReview(bank, it.rev); if (!it) return null;
   let n = 0; const miss = []; bank.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => { n++; if (q.answer === null || q.answer === undefined) return;
     const a = it[si + "." + qi]; if (Array.isArray(a) && a[0] < (q.type === "multi" ? q.answer.length * 0.5 : (q.points || 1))) miss.push(n); }));
-  return `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%). ` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes."); };
+  return `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%).\n` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes."); };
 /* Downloads: CSV, and a small built-in .xlsx writer (no outside library). */
 const saveFile = (blob, name) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
 const toCsv = rows => "\ufeff" + rows.map(r => r.map(v => { const t = v == null ? "" : String(v); return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(",")).join("\r\n");
@@ -208,7 +208,7 @@ function render(){
     const q = $("q").value.trim().toLowerCase(), x = $("ex").value;
     const bsel = $("bf").value;
     const rows = g.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
-    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}</td><td class="small muted">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;
   $("q").oninput = draw; $("ex").onchange = draw; draw();

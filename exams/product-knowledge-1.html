@@ -186,7 +186,7 @@ function grade(){
   /* Notes for the Sheet: item numbers follow the questions file (the Q numbers on the Grades page), not the shuffled order shown here. */
   const itemNo = q => EX.sections.slice(0, q.si).reduce((n, s) => n + s.questions.length, 0) + q.qi + 1;
   const miss = Q.filter((q, i) => correct(i) === false).map(itemNo).sort((a, b) => a - b);
-  const sheetNotes = `${fmt(score)} of ${fmt(max)} points (${pct}%). ` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes.");
+  const sheetNotes = `${fmt(score)} of ${fmt(max)} points (${pct}%).\n` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes.");
   return { rows, score, max, pct, passed, missed, notes, sheetNotes };
 }
 
