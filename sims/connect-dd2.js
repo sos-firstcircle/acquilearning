@@ -117,7 +117,7 @@
     S.moreOpen = false;
     const a = activeDD();
     if(a){ S.modal = {type:"dd-pending", ref:a.ref, id:a.id}; render(); return; }
-    S.flow = {type:"dd", step:0, data:{amountStr:"", term:2, freq:"Monthly", opt:DD2.optDefault(), name:"", cur:"PHP", curOpen:false}, errs:{}};
+    S.flow = {type:"dd", step:0, pick:true, data:{product:"", amountStr:"", term:2, freq:"Monthly", opt:DD2.optDefault(), name:"", cur:"PHP", curOpen:false}, errs:{}};
     logAction("drawdown","Opened drawdown request"); render();
   }
   function effective(d){   // the repayment choices that apply to the current frequency
@@ -218,7 +218,22 @@
   }
 
   /* ---------- flow view (header, stepper, footer) ---------- */
+  /* ---------- Step 0: choose your credit product (before the loan details) ---------- */
+  function productBody(f){
+    const d = f.data, e = f.errs || {};
+    const pc = (id,t,sub,icon)=>`<button class="prod ${d.product===id?"sel":""}" data-act="d2-prod" data-p="${id}"><span class="radio"></span><span class="pi">${icon}</span><b>${t}</b><span>${sub}</span></button>`;
+    return `<h3 style="font-size:22px;margin:0 0 18px">Choose your credit product</h3><div class="prod-grid" style="max-width:780px">
+      ${pc("EBL","Express Business Loan","Get extra funds instantly for a quick boost. Repay funds in one month's time.",ico("draw",14))}
+      ${pc("BCL","Business Credit Line","Borrow funds and repay over a period of up to 24 months.",ico("credit",14))}</div>
+      ${e.product?`<div class="err-msg">${e.product}</div>`:""}
+      <p class="sub" style="margin-top:26px;max-width:780px">You'll set your loan terms, choose a repayment method and disbursement account, then sign your contract. If you choose post-dated checks as your repayment method, you'll be prompted to upload them before your funds are released.</p>`;
+  }
   DD2.flow = function(f){
+    if(f.type==="dd" && f.pick){
+      return `<div class="flow"><div class="flow-h">Request credit drawdown<button class="x" data-act="flow-exit" aria-label="Close">×</button><div class="pbar" style="width:6%"></div></div>
+        <div class="flow-b"><div class="flow-content" style="width:auto;flex:1;display:flex;flex-direction:column;align-items:center;padding-top:40px"><div style="width:100%;max-width:780px">${productBody(f)}</div></div></div>
+        <div class="flow-foot"><div class="d2-foot-r"><button class="btn primary" data-act="d2-next" ${f.data.product?"":"disabled"}>Next →</button></div></div></div>`;
+    }
     const steps = ["Choose your loan","Loan details","Setup disbursement & repayment"];
     let cur, pctW, body, foot;
     if(f.type==="dd"){
@@ -309,8 +324,13 @@
         if(f && f.type==="dd" && f.step===0 && !(parseAmt(f.data.amountStr)>0)){ f.errs = {amount:"Enter a loan amount first."}; render(); return true; }
         if(f && f.type==="dd") openModal(type, f); else modalFromDrawdown(type, el.dataset.id);
         return true; }
-      case "d2-back": if(f.step===0){ S.flow = null; render(); } else { f.step = 0; f.errs = {}; render(); } return true;
+      case "d2-prod": f.data.product = el.dataset.p; f.errs = {}; render(); return true;
+      case "d2-back": if(f.step===0){ f.pick = true; f.errs = {}; render(); } else { f.step = 0; f.errs = {}; render(); } return true;
       case "d2-next": {
+        if(f.pick){
+          if(!f.data.product){ f.errs = {product:"Choose a credit product."}; render(); return true; }
+          if(f.data.product==="EBL"){ S.modal = {type:"notbuilt"}; render(); return true; }
+          f.pick = false; f.errs = {}; render(); return true; }
         const a = parseAmt(f.data.amountStr), avail = availCredit();
         if(isNaN(a) || a < 50000){ f.errs = {amount:"Enter a loan amount of at least ₱ 50,000.00."}; render(); return true; }
         if(a > avail){ f.errs = {amount:`Amount is more than your available credit of ${peso(avail)}.`}; render(); return true; }

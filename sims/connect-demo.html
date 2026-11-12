@@ -1835,11 +1835,13 @@ const FUNCS = [
       chk("Amount",peso(25000),t?peso(t.amt):"–",!!t&&t.amt===25000)]; } },
   { id:"drawdown", group:"Open BCL", pov:"client", name:"Use the credit line (Drawdown)", doc:"Drawdown", next:"uploadchecks", nextLabel:"Next demo: Upload checks",
     goal:"The client needs working capital. Request a drawdown from the Business Credit Line.",
-    vals:[...(DD2.on?[]:["Product: <b>Business Credit Line</b>"]),"Amount: <b>300,000</b>","Term: <b>3 months</b>, <b>Monthly</b>","Repayment: <b>Post-dated checks</b>","Disbursement: <b>SOS Inc. ***4821</b> (BDO)"], init(){ verifiedStart(); },
+    vals:["Product: <b>Business Credit Line</b>","Amount: <b>300,000</b>","Term: <b>3 months</b>, <b>Monthly</b>","Repayment: <b>Post-dated checks</b>","Disbursement: <b>SOS Inc. ***4821</b> (BDO)"], init(){ verifiedStart(); },
     steps:[
       { t:"Open <b>Credit</b> in the left menu to see the available credit. (Clicking <b>Draw funds</b> on Home works too.)", sel:'[data-nav="credit"]', allow:'[data-act="open-dd"]', done:()=>S.page==="credit"||S.page==="dd"||!!S.flow },
       { t:"Click <b>Draw funds</b>.", sel:'[data-act="open-dd"]', done:()=>fty("dd")||S.drawdowns.length>0 },
       ...(DD2.on ? [
+      { t:"Choose <b>Business Credit Line</b>, then <b>Next</b>.", sub:"Express Business Loan is one month only. The Credit Line goes up to 24 months.", sel:'[data-act="d2-next"]', allow:'[data-act="d2-prod"]', fill:inFlow, done:()=>!!(S.flow&&S.flow.type==="dd"&&!S.flow.pick)||S.drawdowns.length>0,
+        verify:()=>D().product==="BCL"?[]:["Choose <b>Business Credit Line</b>"] },
       { t:"Set the amount, term and repayment frequency, then <b>Next</b>.", sub:"The term starts at 2 months. Watch the box on the right: what the client receives, the 1.99% fee, the interest and each repayment. Try <b>View computation</b> to see the breakdown.", showVals:true, sel:'[data-act="d2-next"]', allow:'[data-act="d2-freq"],[data-act="d2-mode"],[data-act="d2-cur"],[data-act="d2-comp"],[data-act="d2-sched"],[data-act="d2-early"],[data-act="close"]', fill:inFlow, done:()=>fstep("dd")>=1||S.drawdowns.length>0,
         verify:()=>{ const d=D(), e=[]; if(parseAmt(d.amountStr)!==300000) e.push("Loan amount should be <b>300,000</b>"); if(d.term!==3) e.push("Term should be <b>3 months</b>"); if(d.freq!=="Monthly") e.push("Repayment frequency should be <b>Monthly</b>"); return e; } },
       { t:"Review the loan details, then click <b>Confirm drawdown</b>.", sub:"Click the <b>i</b> next to Processing fee to see how it works.", sel:'[data-act="d2-confirm"]', allow:'[data-act="d2-pf"],[data-act="d2-sched"],[data-act="close"]', done:()=>S.drawdowns.length>0 },
