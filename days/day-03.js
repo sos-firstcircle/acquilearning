@@ -26,5 +26,5 @@ LMS_DAY_DEFS[3] = {
   ],
   sessions: ["s-d3-self", "s-d3-virtual"],   // ids from LMS_SESSIONS in modules.js; shown at the bottom of the dropdown with a Yes/No
   // Product Knowledge Exam 1 (2 sections). Questions and answer keys: exams/product-knowledge-1-questions.js
-  exam: { id: "d3-exam-product-knowledge-1", label: "Product Knowledge Examination 1", href: "exams/product-knowledge-1.html", kind: "lms", passing: 80 }
+  exam: { id: "d3-exam-product-knowledge-1", label: "Product Knowledge Examination 1", href: "exams/product-knowledge-1.html", kind: "lms", passing: 75 }
 };

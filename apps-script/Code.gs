@@ -155,6 +155,29 @@ function doPost(e) {
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
       return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET) });
     }
+    if (req.action === "setDetails") {     // admins: rewrite the Details (notes) cell of existing Grades rows for one batch. Nothing else in the row is touched.
+      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
+      const allowed = BATCHES[String(p.batch || "")], rowsIn = Array.isArray(p.rows) ? p.rows.slice(0, 500) : [];
+      if (!allowed) throw new Error("bad-batch");
+      const sh = sheet_(GRADES_SHEET, GRADES_HEADER), v = sh.getDataRange().getValues(), h = v[0];
+      const cE = h.indexOf("Email"), cX = h.indexOf("Exam ID"), cA = h.indexOf("Attempt"), cD = h.indexOf("Details");
+      if (cE < 0 || cX < 0 || cD < 0) throw new Error("missing-columns");
+      let updated = 0;
+      rowsIn.forEach(function (it) {
+        const em = String(it.email || "").toLowerCase(); let text = String(it.details || "").slice(0, 3000);
+        if (allowed.indexOf(em) === -1 || !it.id || !text) return;
+        for (let r = 1; r < v.length; r++) {
+          if (String(v[r][cE]).toLowerCase() !== em || String(v[r][cX]) !== String(it.id) || (cA > -1 && String(v[r][cA]) !== String(it.attempt))) continue;
+          const m = /^Honor code: .*?(?: \| |$)/.exec(String(v[r][cD] || ""));        // keep the honor-code name at the start
+          const pre = !m ? "" : / \| $/.test(m[0]) ? m[0] : m[0] + " | ";
+          if (!pre && /^[=+\-@]/.test(text)) text = "'" + text;                       // keep text from being read as a formula
+          sh.getRange(r + 1, cD + 1).setValue(pre + text); updated++;
+          break;
+        }
+      });
+      return json_({ ok: true, updated: updated });
+    }
     if (req.action === "saveRsvp") {
       const ans = p.answer === "yes" ? "yes" : p.answer === "no" ? "no" : "";
       if (!p.id || !ans) throw new Error("bad-rsvp");

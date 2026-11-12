@@ -183,7 +183,11 @@ function grade(){
   const missed = rows.filter(r => r.ok === false).map(r => r.n);
   const bySec = EX.sections.map((s, si) => { const r = rows.filter(x => x.sec === si + 1 && x.ok !== null); return `Section ${si + 1}: ${fmt(Math.round(r.reduce((n, x) => n + x.pts, 0) * 10) / 10)}/${fmt(r.reduce((n, x) => n + x.max, 0))}`; }).join(", ");
   const notes = (score === max ? "All answers correct. " : `${fmt(score)} of ${fmt(max)} points (${pct}%). ${passed ? "Passed" : "Below the " + EX.passing + "% pass mark"}. Not full marks on question${missed.length > 1 ? "s" : ""}: ${missed.join(", ")}. `) + bySec + ".";
-  return { rows, score, max, pct, passed, missed, notes };
+  /* Notes for the Sheet: item numbers follow the questions file (the Q numbers on the Grades page), not the shuffled order shown here. */
+  const itemNo = q => EX.sections.slice(0, q.si).reduce((n, s) => n + s.questions.length, 0) + q.qi + 1;
+  const miss = Q.filter((q, i) => correct(i) === false).map(itemNo).sort((a, b) => a - b);
+  const sheetNotes = `${fmt(score)} of ${fmt(max)} points (${pct}%). ` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes.");
+  return { rows, score, max, pct, passed, missed, notes, sheetNotes };
 }
 
 async function submit(){
@@ -192,7 +196,7 @@ async function submit(){
   const breakdown = g.rows.map(r => `Q${r.n} (S${r.sec}) ${r.ok === null ? "not scored" : r.ok ? "correct" : fmt(r.pts) + "/" + fmt(r.max) + " (answered: " + r.mine + "; correct: " + r.right + ")"}`).join("\n");
   /* Per-question record for the Grades page charts. Key = section.question as written in the questions file (not the shuffled order): [points, answer]. */
   const items = {}; Q.forEach((q, i) => { items[q.si + "." + q.qi] = [earned(i), q.type === "multi" ? answers[i].slice().sort((x, y) => x - y) : q.type === "text" ? digitsOf(answers[i]) : answers[i]]; });
-  try { await LMS.saveResult(EX.id, { score: g.score, max: g.max, passed: g.passed, details: g.notes, breakdown, notes: g.notes, items: JSON.stringify(items) }); } catch (e) {}
+  try { await LMS.saveResult(EX.id, { score: g.score, max: g.max, passed: g.passed, details: g.sheetNotes, breakdown, notes: g.sheetNotes, items: JSON.stringify(items) }); } catch (e) {}
   if (!PREVIEW) LMS.saveReview(EX.id, g);
   results(g);
 }

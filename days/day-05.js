@@ -20,7 +20,7 @@ LMS_DAY_DEFS[5] = {
   ],
   // Questions and answer keys: exams/product-knowledge-3-questions.js
   exams: [
-    { id: "exam-product-knowledge-3", label: "Product Knowledge Examination 3", href: "exams/product-knowledge-3.html", kind: "lms", passing: 80 }
+    { id: "exam-product-knowledge-3", label: "Product Knowledge Examination 3", href: "exams/product-knowledge-3.html", kind: "lms", passing: 75 }
   ],
   // The Notion link is the "Document Guidelines" bookmark from downloads/Bookmarks.html.
   materials: [

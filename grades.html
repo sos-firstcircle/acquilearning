@@ -26,6 +26,9 @@
   .gate form{display:flex;gap:8px}.gate input{flex:1;min-width:0}
   .err{margin-top:12px;color:#8E2A3E;font-size:13px}
   h2.sec{margin:34px 0 10px}
+  .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .top>div:first-child{flex:1;min-width:0}
+  .dl{flex:none;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2);margin-top:6px}
   /* charts */
   .ov{display:grid;grid-template-columns:minmax(140px,260px) 1fr auto;gap:8px 14px;align-items:center;font-size:14px;border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 18px}
   .trk{height:14px;background:var(--mist);border-radius:4px;position:relative;min-width:80px}
@@ -70,7 +73,51 @@ let DATA = { grades:[], progress:[] };
 /* Exams with a question file: used for the per-question chart. Exam id -> [questions file, global name]. */
 const BANKS = { "d3-exam-product-knowledge-1": ["exams/product-knowledge-1-questions.js", "LMS_PK1"], "exam-product-knowledge-2": ["exams/product-knowledge-2-questions.js", "LMS_PK2"], "exam-product-knowledge-3": ["exams/product-knowledge-3-questions.js", "LMS_PK3"] };
 const SIM_ID = "d4-exam-connect-sim";
-const PASS = {}; (window.LMS_DAYS||[]).forEach(d => (d.exams||[]).forEach(e => { if (e.passing) PASS[e.id] = e.passing; }));
+/* One pass mark for every exam (HR / Sales Ops). Pass or fail is worked out here from the percent, so older rows saved under the 80% rule
+   show correctly without changing the Sheet. The Connect sim still cannot be passed with a critical error. */
+const MARK = 75, SIMS = [SIM_ID, "exam-connect-sim"];
+const okRow = r => { const p = r.p !== undefined ? r.p : pct(r); if (p == null) return r.Passed === "Yes";
+  return p >= MARK && !(SIMS.includes(r["Exam ID"]) && /critical error/i.test(String(r.Details || ""))); };
+const pill = r => `<span class="pill ${okRow(r) ? "pass" : "fail"}">${okRow(r) ? "Pass" : "Not yet"}</span>`;
+/* Decision (admins only, never shown to trainees): all product exams failed = do not proceed; at least one passed = proceed to Week 2. */
+const PROD = Object.keys(BANKS), DEC = "__decision";
+/* Notes for one attempt, rebuilt from the Items column so the item numbers follow the questions file (the same Q numbers as the
+   "Per question" chart), not the shuffled order the person saw. Same wording as the exam pages now save. null = nothing to rebuild from. */
+const honorPre = d => { const m = /^Honor code: .*?(?: \| |$)/.exec(String(d || "")); return !m ? "" : / \| $/.test(m[0]) ? m[0] : m[0] + " | "; };
+const noteOf = (r, bank) => { let it = null; try { it = JSON.parse(r.Items || ""); } catch (e) {} if (!it || typeof it !== "object") return null;
+  if (it.sim) { const out = []; Object.values(it.tasks || {}).forEach(t => { if (t.st === "skipped") return out.push(t.title + " - skipped");
+      const w = (t.items || []).filter(i => !i[1]); w.forEach(i => out.push(t.title + " - " + i[0])); if (!w.length && (t.crit || []).length) out.push(t.title + " - critical error"); });
+    const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\.? ?(Mistakes: [\s\S]*|No mistakes\.)$/, "").trim();
+    return (head ? head + ". " : "") + (out.length ? "Mistakes: " + out.join(", ") + "." : "No mistakes."); }
+  if (!bank) return null; if (it.rev) it = fromReview(bank, it.rev); if (!it) return null;
+  let n = 0; const miss = []; bank.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => { n++; if (q.answer === null || q.answer === undefined) return;
+    const a = it[si + "." + qi]; if (Array.isArray(a) && a[0] < (q.type === "multi" ? q.answer.length * 0.5 : (q.points || 1))) miss.push(n); }));
+  return `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%). ` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes."); };
+/* Downloads: CSV, and a small built-in .xlsx writer (no outside library). */
+const saveFile = (blob, name) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
+const toCsv = rows => "\ufeff" + rows.map(r => r.map(v => { const t = v == null ? "" : String(v); return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }).join(",")).join("\r\n");
+const crcT = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const zipStore = files => { const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+  const u16 = n => [n & 255, n >>> 8 & 255], u32 = n => [n & 255, n >>> 8 & 255, n >>> 16 & 255, n >>> 24 & 255];
+  files.forEach(f => { const nm = enc.encode(f[0]), d = enc.encode(f[1]); let c = -1; for (let i = 0; i < d.length; i++) c = crcT[(c ^ d[i]) & 255] ^ (c >>> 8); c = (c ^ -1) >>> 0;
+    const common = [...u16(20), ...u16(0x800), ...u16(0), ...u16(0), ...u16(0x21), ...u32(c), ...u32(d.length), ...u32(d.length), ...u16(nm.length), ...u16(0)];
+    const local = new Uint8Array([0x50, 0x4b, 3, 4, ...common]); parts.push(local, nm, d);
+    cen.push(new Uint8Array([0x50, 0x4b, 1, 2, ...u16(20), ...common, ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm); off += local.length + nm.length + d.length; });
+  const cs = cen.reduce((n, a) => n + a.length, 0);
+  return new Blob([...parts, ...cen, new Uint8Array([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cs), ...u32(off), ...u16(0)])], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }); };
+const toXlsx = (rows, sheet) => { const x = t => String(t).replace(/[^\x09\x0A\x0D\x20-\uFFFD]/g, "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const col = i => { let s = ""; for (i++; i; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
+  const body = rows.map((r, ri) => `<row r="${ri + 1}">${r.map((v, ci) => { const ref = col(ci) + (ri + 1), st = ri ? "" : ' s="1"';
+    return v == null || v === "" ? "" : typeof v === "number" ? `<c r="${ref}"${st}><v>${v}</v></c>` : `<c r="${ref}"${st} t="inlineStr"><is><t xml:space="preserve">${x(v)}</t></is></c>`; }).join("")}</row>`).join("");
+  const widths = rows[0].map((h, i) => `<col min="${i + 1}" max="${i + 1}" width="${Math.min(46, Math.max(10, ...rows.map(r => String(r[i] == null ? "" : r[i]).length + 2)))}" customWidth="1"/>`).join("");
+  const H = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n', M = "http://schemas.openxmlformats.org/spreadsheetml/2006/main", R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships", P = "http://schemas.openxmlformats.org/package/2006/";
+  return zipStore([
+    ["[Content_Types].xml", `${H}<Types xmlns="${P}content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`],
+    ["_rels/.rels", `${H}<Relationships xmlns="${P}relationships"><Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`],
+    ["xl/workbook.xml", `${H}<workbook xmlns="${M}" xmlns:r="${R}"><sheets><sheet name="${x(sheet)}" sheetId="1" r:id="rId1"/></sheets></workbook>`],
+    ["xl/_rels/workbook.xml.rels", `${H}<Relationships xmlns="${P}relationships"><Relationship Id="rId1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${R}/styles" Target="styles.xml"/></Relationships>`],
+    ["xl/styles.xml", `${H}<styleSheet xmlns="${M}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>`],
+    ["xl/worksheets/sheet1.xml", `${H}<worksheet xmlns="${M}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>${widths}</cols><sheetData>${body}</sheetData></worksheet>`]]); };
 /* Older attempts were sent up from the person's browser as [question text, points, answer text]. Match them back to the questions file. */
 const fromReview = (bank, rev) => { const out = {}, dg = s => String(s || "").replace(/[^0-9]/g, "");
   (bank.sections || []).forEach((sec, si) => sec.questions.forEach((q, qi) => { const r = rev.find(x => x[0] === q.q); if (!r) return; const m = String(r[2] == null ? "" : r[2]);
@@ -115,14 +162,31 @@ function render(){
 
   // Best score per person per exam
   const best = {}; g.forEach(r => { const k = r.Email+"|"+r["Exam ID"]; if (best[k]==null || (r.p!=null && r.p>best[k].p)) best[k] = r; });
-  const cell = (e,x) => { const r = best[e+"|"+x]; return r ? `<span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.p!=null?r.p+"%":"—"}</span>` : '<span class="pill none">—</span>'; };
+  const cell = (e,x) => { const r = best[e+"|"+x]; return r ? `<span class="pill ${okRow(r)?"pass":"fail"}">${r.p!=null?r.p+"%":"—"}</span>` : '<span class="pill none">—</span>'; };
+  /* Summary columns: exams in day order, all product exams always shown, Decision right after the last product exam. */
+  const order = []; (window.LMS_DAYS||[]).forEach(d => (d.exams||[]).forEach(e => order.push(e.id)));
+  const rank = x => { const i = order.indexOf(x); return i < 0 ? 999 : i; };
+  /* Order: Day 1 exam, Product Knowledge 1-3, Connect sim, Decision, then any other (newer) exams in day order. */
+  const D1 = "d1-exam-responsible-selling", fixed = [...PROD, SIM_ID];
+  const cols = [...(exams.includes(D1) ? [D1] : []), ...fixed, DEC, ...exams.filter(x => x !== D1 && !fixed.includes(x)).sort((a, b) => rank(a) - rank(b))];
+  /* Latest day with any activity: a ticked task (unticks removed) or an exam taken. */
+  const dayOf = {}; (window.LMS_DAYS||[]).forEach(d => { (d.tasks||[]).forEach(t => dayOf[t.id] = d.day); (d.exams||[]).forEach(x => dayOf[x.id] = d.day); });
+  const live = {}; DATA.progress.forEach(r => { const e = String(r.Email||"").toLowerCase(), id = String(r["Item ID"]), s = live[e] = live[e] || new Set(); id.startsWith("UNDO:") ? s.delete(id.slice(5)) : s.add(id); });
+  g.forEach(r => (live[r.Email] = live[r.Email] || new Set()).add(r["Exam ID"]));
+  const lastDay = e => { const n = Math.max(0, ...[...(live[e] || [])].map(id => dayOf[id] || 0)); return n ? "Day " + n : "—"; };
+  const decide = e => { const rs = PROD.map(x => best[e+"|"+x]).filter(Boolean);
+    return rs.some(okRow) ? { k:"pass", t:"Proceed to Week 2" } : rs.length === PROD.length ? { k:"fail", t:"Do not proceed" } : { k:"none", t:"Pending (" + rs.length + " of " + PROD.length + " taken)" }; };
+  const sumCell = (e,x) => { if (x !== DEC) return cell(e,x); const d = decide(e); return `<span class="pill ${d.k}" style="white-space:nowrap">${d.t}</span>`; };
+  const sumRows = () => [["Onboardee", "Email", "Batch", ...cols.map(x => x === DEC ? "Decision" : nice(x) + " (%)"), "Latest Day Progress", "Tasks done"],
+    ...learners.map(e => [nameOf(e), e, bOf(e), ...cols.map(x => x === DEC ? decide(e).t : (best[e+"|"+x] && best[e+"|"+x].p != null ? best[e+"|"+x].p : "")), lastDay(e), (prog[e]||new Set()).size])];
 
   $("app").innerHTML = `
-    <h1>Grades</h1><p class="muted">Best score per exam. Live from the Google Sheet.</p>
+    <div class="top"><div><h1>Grades</h1><p class="muted">Best score per exam. Pass mark ${MARK}%. Live from the Google Sheet.</p></div>
+      <div class="dl">Download <button class="btn sm" id="dlcsv">CSV</button><button class="btn sm" id="dlxlsx">Excel</button></div></div>
     <div class="bar"><button class="btn sm" id="refresh">Refresh</button>
       <select id="bf" aria-label="Batch"><option value="">All batches</option>${batches.map(b=>`<option value="${esc(b)}" ${b===batchSel?"selected":""}>Batch ${esc(b)}</option>`).join("")}</select></div>
-    <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Batch</th>${exams.map(x=>`<th>${esc(nice(x))}</th>`).join("")}<th>Tasks done</th></tr></thead><tbody>
-      ${learners.map(e=>`<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(bOf(e)||"—")}</td>${exams.map(x=>`<td>${cell(e,x)}</td>`).join("")}<td>${(prog[e]||new Set()).size}</td></tr>`).join("") || '<tr><td class="muted">No onboardees yet.</td></tr>'}
+    <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Batch</th>${cols.map(x=>x===DEC?'<th title="All product exams failed = do not proceed. At least one passed = proceed to Week 2.">Decision</th>':`<th>${esc(nice(x))}</th>`).join("")}<th title="The latest day where they ticked a task or took an exam.">Latest Day Progress</th><th>Tasks done</th></tr></thead><tbody>
+      ${learners.map(e=>`<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(bOf(e)||"—")}</td>${cols.map(x=>`<td>${sumCell(e,x)}</td>`).join("")}<td style="white-space:nowrap">${lastDay(e)}</td><td>${(prog[e]||new Set()).size}</td></tr>`).join("") || '<tr><td class="muted">No onboardees yet.</td></tr>'}
     </tbody></table></div>
 
     <h2 class="sec">Overall</h2><p class="muted small" style="margin:0 0 10px">Average best score per exam for the selected batch. The dark line is the pass mark.</p>
@@ -134,22 +198,36 @@ function render(){
     <div id="items"></div>
 
     <h2 class="sec">Every attempt</h2>
-    <div class="bar"><input id="q" type="search" placeholder="Search name or email" aria-label="Search"><select id="ex" aria-label="Exam"><option value="">All exams</option>${exams.map(x=>`<option value="${esc(x)}">${esc(nice(x))}</option>`).join("")}</select></div>
+    <div class="bar"><input id="q" type="search" placeholder="Search name or email" aria-label="Search"><select id="ex" aria-label="Exam"><option value="">All exams</option>${exams.map(x=>`<option value="${esc(x)}">${esc(nice(x))}</option>`).join("")}</select>
+      ${batchSel ? '<button class="btn sm" id="fixnotes" title="Rewrites the Details (notes) cell of this batch in the Grades tab so the mistakes follow the exam order. Scores are not changed.">Update notes in Sheet</button><span class="small muted" id="fixmsg"></span>' : ""}</div>
+    <p class="muted small" style="margin:-8px 0 10px">Notes list the mistakes by item number in exam order (the same Q numbers as Per question above).</p>
     <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Onboardee</th><th>Batch</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></div>`;
 
+  const banks = {}, fullNote = r => { const n = noteOf(r, banks[r["Exam ID"]]); return n == null ? String(r.Details || "") : honorPre(r.Details) + n; };
   const draw = () => {
     const q = $("q").value.trim().toLowerCase(), x = $("ex").value;
     const bsel = $("bf").value;
     const rows = g.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
-    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td><td class="small muted">${esc(r.Details)}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}</td><td class="small muted">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;
   $("q").oninput = draw; $("ex").onchange = draw; draw();
+  const banksReady = Promise.all(Object.keys(BANKS).map(x => loadBank(x).then(b => { banks[x] = b; }))).then(() => { if ($("rows")) draw(); });
+  /* Admin: write the rebuilt notes into the Sheet (Details cell only) for the selected batch. Needs the setDetails action in Code.gs. */
+  if ($("fixnotes")) $("fixnotes").onclick = async () => { await banksReady;
+    const list = g.filter(r => bOf(r.Email) === batchSel && !admins.includes(r.Email)).map(r => ({ r, n: noteOf(r, banks[r["Exam ID"]]) })).filter(o => o.n != null && honorPre(o.r.Details) + o.n !== String(o.r.Details || ""));
+    if (!list.length) { $("fixmsg").textContent = "Notes in the Sheet are already up to date."; return; }
+    if (!confirm("Rewrite the notes (Details cell) of " + list.length + " attempt" + (list.length > 1 ? "s" : "") + " in batch " + batchSel + " in the Google Sheet?\n\nScores and everything else stay as they are.")) return;
+    $("fixnotes").disabled = true; $("fixmsg").textContent = "Updating…";
+    const u = LMS.user() || {}, res = await fetch(LMS.config.backendUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "setDetails", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "", batch: batchSel, rows: list.map(o => ({ email: o.r.Email, id: o.r["Exam ID"], attempt: o.r.Attempt, details: o.n })) } }) }).then(x => x.json()).catch(() => null);
+    if (res && res.ok) { $("fixmsg").textContent = res.updated + " updated. Reloading…"; load(sessionStorage.getItem("amhub.adminpc") || ""); }
+    else { $("fixnotes").disabled = false; $("fixmsg").textContent = !res ? "Couldn't reach the Sheet." : res.error === "unknown-action" ? "The Apps Script needs to be redeployed first (New version)." : "Couldn't update (" + res.error + ")."; } };
   /* ---- Overall: average best score per exam ---- */
   const inBatch = r => !batchSel || (r.Batch || bOf(r.Email)) === batchSel;
   const ov = exams.map(x => { const rs = Object.values(best).filter(r => r["Exam ID"] === x && inBatch(r) && !admins.includes(r.Email) && r.p != null);
-    return { x, n: rs.length, avg: rs.length ? Math.round(rs.reduce((n, r) => n + r.p, 0) / rs.length) : null, pass: rs.filter(r => r.Passed === "Yes").length }; }).filter(o => o.n);
-  $("overall").innerHTML = ov.length ? `<div class="ov">${ov.map(o => { const pm = PASS[o.x];
+    return { x, n: rs.length, avg: rs.length ? Math.round(rs.reduce((n, r) => n + r.p, 0) / rs.length) : null, pass: rs.filter(okRow).length }; }).filter(o => o.n);
+  $("overall").innerHTML = ov.length ? `<div class="ov">${ov.map(o => { const pm = MARK;
     return `<div>${esc(nice(o.x))}</div><div class="trk" title="Average ${o.avg}%${pm ? ", pass mark " + pm + "%" : ""}"><i style="width:${Math.min(100, o.avg)}%"></i>${pm ? `<u style="left:${pm}%"></u>` : ""}</div><div class="small muted">Average ${o.avg}% · ${o.pass} of ${o.n} passed</div>`; }).join("")}</div>` : '<p class="muted">No scores yet for this batch.</p>';
 
   /* ---- Per question: each person's first attempt that has per-question answers ---- */
@@ -224,6 +302,9 @@ function render(){
   if ([...$("ix").options].some(o => o.value === keepIx)) $("ix").value = keepIx; $("isort").value = keepSort;
   $("ix").onchange = drawItems; $("isort").onchange = drawItems; drawItems();
   $("bf").onchange = render;
+  const fname = ext => "grades-summary-" + (batchSel ? "batch-" + batchSel : "all-batches") + "-" + new Date().toLocaleDateString("en-CA") + "." + ext;
+  $("dlcsv").onclick = () => saveFile(new Blob([toCsv(sumRows())], { type: "text/csv;charset=utf-8" }), fname("csv"));
+  $("dlxlsx").onclick = () => saveFile(toXlsx(sumRows(), "Grades summary"), fname("xlsx"));
   $("refresh").onclick = () => load(sessionStorage.getItem("amhub.adminpc") || "");
 }
 
@@ -246,10 +327,10 @@ function drawMine(grades, note, retry){
   const exams = Object.values(best);
   $("app").innerHTML = `<h1>My grades</h1><p class="muted">Your results for the graded exams. The best score counts.${note ? ` <span class="small">${esc(note)}</span>${retry ? ' <a href="#" id="retryMine">Try again</a>' : ""}` : ""}</p>
     <div class="scroll" style="margin-top:18px"><table class="tbl"><thead><tr><th>Exam</th><th>Best score</th><th>Result</th><th>Attempts</th></tr></thead><tbody>
-      ${exams.map(r=>`<tr><td><b>${esc(nice(r["Exam ID"]))}</b></td><td>${esc(r.Score)}/${esc(r.Max)}${r.p!=null?` (${r.p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td><td>${rows.filter(x=>x["Exam ID"]===r["Exam ID"]).length}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No graded exams yet.</td></tr>'}
+      ${exams.map(r=>`<tr><td><b>${esc(nice(r["Exam ID"]))}</b></td><td>${esc(r.Score)}/${esc(r.Max)}${r.p!=null?` (${r.p}%)`:""}</td><td>${pill(r)}</td><td>${rows.filter(x=>x["Exam ID"]===r["Exam ID"]).length}</td></tr>`).join("") || '<tr><td colspan="4" class="muted">No graded exams yet.</td></tr>'}
     </tbody></table></div>
     ${rows.length ? `<h2 class="sec">Every attempt</h2><div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody>
-      ${rows.map(r=>{ const p = pct(r); return `<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)}${p!=null?` (${p}%)`:""}</td><td><span class="pill ${r.Passed==="Yes"?"pass":"fail"}">${r.Passed==="Yes"?"Pass":"Not yet"}</span></td><td class="small muted">${esc(honorOf(r))}</td></tr>`; }).join("")}
+      ${rows.map(r=>{ const p = pct(r); return `<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)}${p!=null?` (${p}%)`:""}</td><td>${pill(r)}</td><td class="small muted">${esc(honorOf(r))}</td></tr>`; }).join("")}
     </tbody></table></div>` : ""}`;
   const rb = $("retryMine"); if (rb) rb.onclick = e => { e.preventDefault(); loadMine(); };
 }

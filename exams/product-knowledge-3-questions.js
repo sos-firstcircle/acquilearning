@@ -9,7 +9,7 @@ var MULTI_OPTS = ["Latest DTI Certificate","Signed Secretary's Certificate","SEC
 window.LMS_PK3 = {
   id: "exam-product-knowledge-3",
   title: "Product Knowledge Examination 3",
-  passing: 80,
+  passing: 75,
   sections: [
     { title: "First Circle Business Credit Line: Product & Features",
       desc: "Aside from the product features, do you really know what the product is and how it works within the company?",

@@ -6,7 +6,7 @@
 window.LMS_PK2 = {
   id: "exam-product-knowledge-2",
   title: "Product Knowledge Examination 2",
-  passing: 80,
+  passing: 75,
   sections: [
     { title: "First Circle Business Credit Line: Product & Features",
       desc: "Aside from the product features, do you really know what the product is and how it works within the company?",
