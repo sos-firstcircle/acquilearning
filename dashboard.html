@@ -269,8 +269,8 @@ function sessionTime(s){
   const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`;
 }
-// Sessions for this person's batch (admins see all). A session with no batch is for everyone.
-const mySessions = () => (window.LMS_SESSIONS||[]).filter(s => !s.batch || LMS.isAdmin() || [].concat(s.batch).includes(LMS.batchOf((LMS.user()||{}).email)));
+// Sessions for this person's batch only (admins and other batches see none). A session with no batch is for everyone.
+const mySessions = () => (window.LMS_SESSIONS||[]).filter(s => !s.batch || [].concat(s.batch).includes(LMS.batchOf((LMS.user()||{}).email)));
 function daySessions(sel){
   const list = (sel.sessions||[]).map(id => mySessions().find(x => x.id === id)).filter(Boolean);
   if (!list.length) return "";

@@ -54,7 +54,7 @@ function render(rows){
   rows.slice().sort((a,b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => { latest[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = r; });
   const R = LMS.roster(), now = new Date();
   const bl = s => s.batch ? [].concat(s.batch) : [];
-  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(Object.keys(R.batches)))].sort();
+  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl))].sort();
   const sessions = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).map(s => ({ ...s, d:new Date(s.when) })).sort((a,b) => a.d - b.d);
   const card = s => {
     const expected = (s.batch ? bl(s).filter(b => batchSel ? b === batchSel : !TEST_BATCHES.includes(b)).flatMap(b => R.batches[b] || []) : R.learners).map(e => e.toLowerCase());
