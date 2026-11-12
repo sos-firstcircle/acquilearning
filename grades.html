@@ -66,7 +66,8 @@ examLabel["exam-connect-sim"] = "Connect Simulation";
 const taskLabel = {};
 (window.LMS_DAYS||[]).forEach(d => (d.tasks||[]).forEach(t => taskLabel[t.id] = t.label));
 const nice = id => examLabel[id] || taskLabel[id] || id;
-const nameOf = e => e.split("@")[0].split(/[._-]/).map(w=>w[0].toUpperCase()+w.slice(1)).join(" ");
+const CODED = {};   // shared-login people who signed in with an access code arrive as shared+<id>@...; their real name comes from the Sheet rows
+const nameOf = e => CODED[e] || e.split("@")[0].split(/[._-]/).filter(Boolean).map(w=>w[0].toUpperCase()+w.slice(1)).join(" ");
 const pct = r => r.Percent !== "" && r.Percent != null ? Number(r.Percent) : (r.Max ? Math.round(r.Score/r.Max*1000)/10 : null);
 const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}) : "";
 let DATA = { grades:[], progress:[] };
@@ -149,6 +150,7 @@ async function load(passcode){
 
 function render(){
   const bn = v => (v === "" || v == null) ? "" : String(v).padStart(6, "0");   // Sheets may drop leading zeros
+  [].concat(DATA.grades || [], DATA.progress || []).forEach(r => { const e = String(r.Email || "").toLowerCase(); if (/\+[^@]*@/.test(e) && r.Name) CODED[e] = String(r.Name); });
   const g = DATA.grades.filter(r => !String(r["Exam ID"]).startsWith("TEST-")).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
   const bOf = e => LMS.batchOf(e) || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());

@@ -35,6 +35,11 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - New Connect drawdown design (Nov 2026): `sims/connect-dd2.js`, loaded by `sims/connect-exam.html` and `sims/connect-demo.html` (guided drawdown/upload demos have a second step list). On for every batch except `OLD_BATCHES` in that file (110926 keeps the old flow). Test with `?dd=new` / `?dd=old`. Rates: base 1.39%/month, Bi-weekly -0.10%, One-time +1%, processing fee 1.99%, 2 months minimum.
 - `department.html`: visible to everyone, "Coming soon" (internal jargon, team directory, ways of working).
 
+## Access codes for the shared login (batch 000002)
+- `acquisitiongroup@` signs in with the email, then a personal access code. The codes live ONLY in the Sheet tab `Codes` (columns `Token | Name | Status`), never in the repo. Status blank or `active` = allowed; anything else blocks the code within about a minute and signs the person out.
+- `checkEmail_` / `codes_` in Code.gs do the check on every request. A coded person is recorded as `acquisitiongroup+<id>@firstcircle.com` (id = a scramble of the code) with their real name, so progress and grades are per person. `LMS.batchOf` and the Grades page understand that form. If the `Codes` tab is missing or empty, codes are off and the shared login works as before (honor code name on exams).
+- Client: `codeLogin` in lms.js config, `LMS.signInWithCode`, second step on `index.html`.
+
 ## Grades page charts (admins)
 - `grades.html` has "Overall" (average best score per exam) and "Per question" charts. Per question uses the `Items` column of the Grades tab: a JSON record sent with each attempt (`items` in `LMS.saveResult`).
 - Product Knowledge 1-3: `Items` = `{"section.question": [points, answer]}`, keyed by position in the questions file (not the shuffled order). Add new questions at the END of a section, or old answers line up with the wrong question.

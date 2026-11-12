@@ -52,6 +52,12 @@ const ADMIN_PASSCODE = "";
 // Batches that may retake exams. Everyone else gets one attempt per exam (enforced here, not just in the browser).
 const RETAKE_BATCHES = ["000001", "000002"];
 
+// Shared-login batches: everyone types the same email, then a personal access code.
+// The codes live ONLY in the Sheet tab below (never in the repo): columns  Token | Name | Status
+// Status "inactive" (or anything other than blank / "active") blocks that code. If the tab is missing or empty, codes are off and the shared login works as before.
+const CODE_BATCHES = ["000002"];
+const CODES_SHEET = "Codes";
+
 const GRADES_SHEET = "Grades";      // one row per scored attempt
 const PROGRESS_SHEET = "Progress";  // one row per completed task/lesson
 const GRADES_HEADER = ["Timestamp", "Email", "Name", "Batch", "Exam ID", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Items"];   // Items = per-question answers (JSON) for the Grades page charts
@@ -90,6 +96,7 @@ function doPost(e) {
     const p = req.payload || {};
 
     if (req.action === "verify") return json_({ ok: true, email: user.email });
+    if (req.action === "checkCode") return json_({ ok: true, email: user.email, name: user.name, coded: !!user.coded });   // checkEmail_ above already threw if the code is wrong or inactive
 
     if (req.action === "saveResult") {
       if (RETAKE_BATCHES.indexOf(user.batch) === -1 && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id; })) {
@@ -270,10 +277,42 @@ function chatNotes_() {
 
 /** Temporary mode: accept an email that is on the allow list. */
 function checkEmail_(req) {
-  const email = String(req.email || "").trim().toLowerCase();
-  const batch = Object.keys(BATCHES).filter(function (k) { return BATCHES[k].indexOf(email) !== -1; })[0] || "";
+  let email = String(req.email || "").trim().toLowerCase();
+  const plain = email.replace(/\+[^@]*@/, "@");                        // a coded person arrives as shared+<id>@...
+  const batchFor = function (e) { return Object.keys(BATCHES).filter(function (k) { return BATCHES[k].indexOf(e) !== -1; })[0] || ""; };
+  if (plain !== email) { if (CODE_BATCHES.indexOf(batchFor(plain)) === -1) throw new Error("not-on-list"); email = plain; }
+  const batch = batchFor(email);
   if (!email.endsWith("@" + ALLOWED_DOMAIN) || (!batch && ADMIN_EMAILS.indexOf(email) === -1)) throw new Error("not-on-list");
+  if (CODE_BATCHES.indexOf(batch) !== -1) {
+    const codes = codes_();
+    if (codes) {                                                        // codes are switched on (the Codes tab has rows)
+      const c = String(req.code || "").trim().toUpperCase();
+      if (!c) throw new Error("code-required");
+      const row = codes[c];
+      if (!row) throw new Error("code-invalid");
+      if (!row.active) throw new Error("code-inactive");
+      // Each person gets their own identity so progress and grades are kept apart: shared+<id>@...  (id = a scramble of the code, not the code itself)
+      return { email: email.replace("@", "+" + row.id + "@"), name: row.name || email, batch: batch, coded: true };
+    }
+  }
   return { email: email, name: req.name || email, batch: batch };
+}
+
+/** The access codes from the Codes tab: { TOKEN: { name, active, id } }, or null when the tab is missing or empty. Cached for one minute. */
+function codes_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("codes_v1");
+  if (hit) return hit === "none" ? null : JSON.parse(hit);
+  const rows = readRows_(CODES_SHEET), out = {};
+  rows.forEach(function (r) {
+    const t = String(r.Token || "").trim().toUpperCase(); if (!t) return;
+    const st = String(r.Status || "").trim().toLowerCase();
+    const dig = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, "acqui-code:" + t);
+    const id = dig.slice(0, 5).map(function (b) { return ("0" + (b & 255).toString(16)).slice(-2); }).join("");
+    out[t] = { name: String(r.Name || "").trim(), active: st === "" || st === "active", id: id };
+  });
+  const has = Object.keys(out).length > 0;
+  try { cache.put("codes_v1", has ? JSON.stringify(out) : "none", 60); } catch (e) {}
+  return has ? out : null;
 }
 
 /** Ask Google to validate the ID token, then enforce audience and domain. */

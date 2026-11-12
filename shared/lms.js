@@ -30,6 +30,7 @@ window.LMS_CONFIG = {
   // (for people who did those days before this site existed). Delete a line to turn it off.
   // Batches allowed to retake exams. Everyone else gets one attempt per exam.
   multiAttempt: ["000001", "000002"],
+  codeLogin: ["000002"],              // shared-login batches that also need a personal access code (checked by the Sheet's "Codes" tab; the codes are never in this repo)
   honorCode: ["000002"],              // batches that share one login: exams ask for a typed name first (saved with the result as a Note)
   noReview: ["000002"],               // batches that can retake but cannot reopen their last answers/result
   catchUp: {},                        // e.g. { "101926": [1, 2, 3] }
@@ -58,8 +59,10 @@ window.LMS_CONFIG = {
   /* Read lazily: roster.js loads just after this file. Returns { admins, learners, batches }. */
   const roster = () => { const r = window.LMS_ROSTER || {}, batches = r.batches || {};
     return { admins: r.admins || [], batches, learners: [].concat(...Object.values(batches)) }; };
-  function batchOf(email){ const e = String(email||"").trim().toLowerCase(), b = roster().batches;
-    return Object.keys(b).find(k => lc(b[k]).includes(e)) || ""; }
+  function batchOf(email){ const b = roster().batches, find = e => Object.keys(b).find(k => lc(b[k]).includes(e)) || "";
+    const e = String(email||"").trim().toLowerCase(), plain = e.replace(/\+[^@]*@/, "@");
+    if (plain !== e) { const pb = find(plain); return (C.codeLogin || []).includes(pb) ? pb : ""; }   // a coded person is shared+<id>@...
+    return find(e); }
   const lc = a => (a||[]).map(e => String(e).trim().toLowerCase());
   function isCompanyEmail(email){
     const d = String(C.allowedDomain||"").toLowerCase();
@@ -70,7 +73,7 @@ window.LMS_CONFIG = {
     if (!isCompanyEmail(email)) return false;
     if (!C.emailLogin) return true;
     const e = String(email).trim().toLowerCase();
-    return lc(roster().admins).includes(e) || lc(roster().learners).includes(e);
+    return lc(roster().admins).includes(e) || lc(roster().learners).includes(e) || !!batchOf(e);
   }
   /* Decode the payload of a Google ID token (for display only; the backend does the real check). */
   function decodeJwt(t){
@@ -87,10 +90,11 @@ window.LMS_CONFIG = {
     if (C.demo || !C.backendUrl) return Promise.resolve(null);
     opts = opts || {};
     const body = () => { let token = ""; try { token = sessionStorage.getItem(`${KEY}.idtoken`) || ""; } catch(e){}
-      return JSON.stringify({ action, token, payload, email: (currentUser()||{}).email, name: (currentUser()||{}).name }); };   // email/name are used only in the temporary email-list mode
+      const u = (opts.as || currentUser() || {});
+      return JSON.stringify({ action, token, payload, email: u.email, name: u.name, code: u.code || "" }); };   // email/name are used only in the temporary email-list mode
     const once = ms => { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
       return fetch(C.backendUrl, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: body(), signal: ctl.signal, keepalive: true })   // text/plain avoids a CORS preflight, which Apps Script can't answer
-        .then(r => r.json()).then(j => { clearTimeout(t); return j; }).catch(() => { clearTimeout(t); return null; }); };
+        .then(r => r.json()).then(j => { clearTimeout(t); if (j && !j.ok && /^code-/.test(String(j.error)) && !opts.as) codeKick(j.error); return j; }).catch(() => { clearTimeout(t); return null; }); };
     if (!opts.retry) return once(opts.timeout || 30000);
     return new Promise(resolve => {
       let finished = false, failed = 0; const delays = [0, 6000, 14000];
@@ -99,6 +103,15 @@ window.LMS_CONFIG = {
         once(25000).then(r => { if (r) fin(r); else if (++failed === delays.length) fin(null); }); }, d));
       setTimeout(() => fin(null), 34000);
     });
+  }
+
+  /* The Sheet said this person's access code is missing, wrong or switched off: sign them out and tell them why on the sign-in page. */
+  let kicked = false;
+  function codeKick(err){
+    if (kicked) return; kicked = true;
+    try { sessionStorage.setItem(`${KEY}.flash`, err === "code-inactive" ? "Your access code is no longer active. Please contact Salesops." : "Please sign in again with your access code.");
+      localStorage.removeItem(`${KEY}.user`); } catch(e){}
+    location.href = (location.pathname.includes("/lessons/") || location.pathname.includes("/sims/") || location.pathname.includes("/exams/")) ? "../index.html" : "index.html";
   }
 
   /* Progress lives in the Google Sheet (so it follows the person to any browser). The browser copy is just a cache.
@@ -164,7 +177,7 @@ window.LMS_CONFIG = {
     canRetake(){ const u = currentUser(); return !!u && (C.multiAttempt || []).includes(batchOf(u.email)); },
 
     /** Honor code (shared-login batches in C.honorCode): the exam intro shows a pledge and a name box; the name is saved with the result. */
-    honorRequired(){ const u = currentUser(); return !!u && (C.honorCode || []).includes(batchOf(u.email)) && !isPreview(); },
+    honorRequired(){ const u = currentUser(); return !!u && !u.code && (C.honorCode || []).includes(batchOf(u.email)) && !isPreview(); },   // not needed once the person signed in with their own code (their name is known)
     honorHtml(){
       return `<div class="note" id="honorBox" style="margin:14px 0"><b>Honor code</b><br>I will take this exam on my own, without notes, help or looking at the answers. Please type your full name.<br><input id="honorName" type="text" autocomplete="off" placeholder="Your full name" style="margin-top:8px;width:100%;max-width:320px;padding:9px 12px;border:1px solid #CBD5D7;border-radius:8px;font:inherit;font-size:14px"></div>`;
     },
@@ -202,9 +215,24 @@ window.LMS_CONFIG = {
     signInDemo(email){
       email = String(email).trim();
       if (!isAllowed(email)) throw new Error(isCompanyEmail(email) ? "not-on-list" : "not-company");
+      if ((C.codeLogin || []).includes(batchOf(email)) && C.backendUrl && !C.demo) throw new Error("need-code");   // the sign-in page then asks for the code and calls signInWithCode
       const local = String(email).split("@")[0];
       const name = local.split(/[._-]/).map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
       write("user", { name, email:String(email).toLowerCase(), batch: batchOf(email), startDate: C.demoUser.startDate });
+    },
+
+    /** Shared-login batches: check the typed access code with the Sheet, then sign in as that person.
+        Resolves on success; rejects with "code-invalid", "code-inactive" or "backend" (couldn't reach the Sheet). */
+    signInWithCode(email, code){
+      email = String(email).trim().toLowerCase().replace(/\+[^@]*@/, "@"); code = String(code || "").trim().toUpperCase();
+      const local = email.split("@")[0], fallback = local.charAt(0).toUpperCase() + local.slice(1);
+      return send("checkCode", {}, { as: { email, name: fallback, code }, retry: true }).then(res => {
+        if (!res) throw new Error("backend");
+        if (!res.ok) throw new Error(/^code-/.test(String(res.error)) ? (res.error === "code-required" ? "code-invalid" : res.error) : "backend");
+        const u = { name: res.coded ? (res.name || fallback) : fallback, email: res.coded ? res.email : email, batch: batchOf(email), startDate: C.demoUser.startDate };
+        if (res.coded) u.code = code;                         // codes switched off in the Sheet: plain shared login, as before
+        write("user", u);
+      });
     },
 
     /** Send people to the sign-in page if they're not signed in. */
