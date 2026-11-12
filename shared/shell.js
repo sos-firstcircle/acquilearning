@@ -23,13 +23,21 @@ function renderSide(active){
   document.getElementById("side").innerHTML = `
     <div class="brand">${LOGO}<div><b>${esc(C.appName)}</b><small>${esc(C.company)}</small></div></div>
     <ul class="nav">
+      ${LMS.isAdmin() ? `
+      <li class="nav-label">Learning</li>
+      ${link("dashboard.html","home","Dashboard (New Hires)","dashboard")}
+      ${link("dashboard.html?view=general","home","Dashboard (General)","general")}
+      ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
+      ${link("library.html","book","Library","library")}
+      ${link("department.html","session","Department","department")}
+      ${link("chatbot.html","chat","Chatbot (pilot)","chatbot")}
+      <li class="nav-label">Trainers</li>
+      ${link("grades.html","grades","Grades","grades")}${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : `
       ${link("dashboard.html","home","Dashboard","dashboard")}
-
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}
-      ${(LMS.isExisting() || LMS.isAdmin()) ? link("library.html","book","Library","library") : ""}
-      ${link("department.html","session","Department","department")}
-      ${LMS.isAdmin() ? `<li class="nav-label">Trainers</li>${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("chatbot.html","chat","Chatbot (pilot)","chatbot")}${link("settings.html","admin","Settings","settings")}` : ""}
+      ${LMS.isExisting() ? link("library.html","book","Library","library") : ""}
+      ${link("department.html","session","Department","department")}`}
     </ul>
     <div class="side-foot"><span class="av">${esc(LMS.initials(u.name))}</span><div><b>${esc(u.name)}</b>${LMS.batchOf(u.email) ? `<small style="display:block;color:#8FB0B6;font-size:11px;line-height:1.3">Batch ${esc(LMS.batchOf(u.email))}</small>` : ""}<button id="signOut">Sign out</button></div></div>`;
   document.getElementById("signOut").onclick = () => LMS.signOut();

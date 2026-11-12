@@ -314,6 +314,8 @@ function gradedHtml(days, P){
 
 /* ---------- Existing AMs: one-screen view of lectures, simulations and practice exams (existing/sections.js) ---------- */
 const EX_KIND = { lecture:"Guided demo", practice:"Practice exam", exam:"Simulation exam" };
+/* Admins: "Dashboard (General)" in the sidebar (?view=general) shows what the existing AMs (batch 000002) see. */
+const GENERAL = LMS.isAdmin() && /[?&]view=general\b/.test(location.search);
 function renderExisting(){
   const u = LMS.user(), P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   const all = window.LMS_EXISTING.flatMap(s => s.groups.flatMap(g => g.items)), nDone = all.filter(i => done(i.id)).length;
@@ -348,7 +350,7 @@ function renderExisting(){
 }
 
 function render(){
-  if (LMS.isExisting()) return renderExisting();
+  if (LMS.isExisting() || GENERAL) return renderExisting();
   const u = LMS.user(), { days, current, P } = compute();
   const completeCount = days.filter(d => d.status === "complete").length;
 
@@ -420,7 +422,7 @@ function advance(){
 }
 
 window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
-if (LMS.requireSignIn()) { renderSide("dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); LMS.syncRsvps().then(changed => { if (changed && !Object.values(rsvpOpen).some(Boolean)) render(); }); }
+if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); LMS.syncRsvps().then(changed => { if (changed && !Object.values(rsvpOpen).some(Boolean)) render(); }); }
 </script>
 </body>
 </html>
