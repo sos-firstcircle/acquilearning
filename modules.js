@@ -46,5 +46,7 @@ window.LMS_SESSIONS = [
   { id:"s-d4-self", batch:["110926","000000"], title:"Day 4: Onboarding [Self Pace] - Product Exam 2 & FC Connect Simulation Exam", when:"2026-11-12T09:00", minutes:165, room:"", link:"",
     desc:"Please accomplish Product Knowledge Examination 2 and the FC Connect Simulation Exam for the morning." },
   { id:"s-d4-virtual", batch:["110926","000000"], title:"Day 4: Onboarding [Virtual] - Intro to Acqui Service Part 1", when:"2026-11-12T14:30", minutes:180, room:"", link:"https://meet.google.com/znc-stnp-owm",
-    desc:"Introduction discussion to our in-house CRM, Acquisitions Service (Acqui Service/ACQ SVC)." }
+    desc:"Introduction discussion to our in-house CRM, Acquisitions Service (Acqui Service/ACQ SVC)." },
+  { id:"s-d5-virtual", batch:["110926","000000"], title:"Day 5: Onboarding [Virtual] - Intro to Acqui Service Part 2", when:"2026-11-13T10:00", minutes:120, room:"", link:"https://meet.google.com/tnd-krwh-qgu",
+    desc:"Hands-on follow-up to Part 1. We go through the Acqui Service demos and practice checks (tour, lead reassignment, lead creation, registering a referrer in Slack), answer your questions, and review Product Knowledge Examination 3." }
 ];

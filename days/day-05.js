@@ -1,6 +1,7 @@
 /* Day 5. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[5] = {
   title: "Intro to Acqui Service",
+  sessions: ["s-d5-virtual"],   // ids from LMS_SESSIONS in modules.js; shown at the bottom of the dropdown
   brief: "Find your way around Acqui Service, our CRM, then learn to request a lead (reassignment) and to enroll a new lead.",
   materialsTitle: "Further Reading",
   materialsBelow: true,
