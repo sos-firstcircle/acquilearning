@@ -752,7 +752,7 @@ function settingsView(){
   if(t==="profile"){
     body = `<div class="prof-head"><span class="prof-av">${esc(initials(u))}</span><b>${esc(fullName(u))}</b></div>
       <div class="srow"><span class="k">Full name</span><span class="v">${esc(fullName(u))}</span><button class="change" data-act="m-name">${ico("pen",14)}Change</button></div>
-      <div class="srow"><span class="k">Email address</span><span class="v">${esc(u.email)}</span><button class="change" data-act="m-email">${ico("pen",14)}Change</button></div>
+      <div class="srow"><span class="k">Email address</span><span class="v">${esc(u.email)}</span><span></span></div>
       <div class="srow"><span class="k">Mobile number</span><span class="v">${fmtMobile(u.mobile)}</span><button class="change" data-act="m-mobile">${ico("pen",14)}Change</button></div>
       <div class="srow" style="align-items:start;border:0"><span class="k">Account permissions</span>
         <div class="perm"><span>General</span><span class="badge">${ico("star",12)}Admin</span><span>Business accounts</span><span class="badge">${ico("star",12)}Admin</span><span>Credit line</span><span class="badge">${ico("star",12)}Admin</span></div><span></span></div>`;
