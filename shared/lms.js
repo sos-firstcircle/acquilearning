@@ -109,7 +109,7 @@ window.LMS_CONFIG = {
   let kicked = false;
   function codeKick(err){
     if (kicked) return; kicked = true;
-    try { sessionStorage.setItem(`${KEY}.flash`, err === "code-inactive" ? "Your access code is no longer active. Please contact Salesops." : "Please sign in again with your access code.");
+    try { sessionStorage.setItem(`${KEY}.flash`, err === "code-inactive" ? "Your FC token is no longer active. Please contact Salesops." : "Please sign in again with your FC token.");
       localStorage.removeItem(`${KEY}.user`); } catch(e){}
     location.href = (location.pathname.includes("/lessons/") || location.pathname.includes("/sims/") || location.pathname.includes("/exams/")) ? "../index.html" : "index.html";
   }

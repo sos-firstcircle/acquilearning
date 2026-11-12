@@ -44,9 +44,14 @@
     <form id="demoForm"><input id="demoEmail" type="email" placeholder="name@firstcircle.com" required aria-label="Email"><button>Continue</button></form>
   </div>
   <div class="demo" id="codeBox" hidden style="margin-top:20px">
-    <b>Enter your access code</b>
-    <small>This is the personal code Salesops gave you.</small>
-    <form id="codeForm"><input id="codeInput" type="text" placeholder="Access code" required autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" aria-label="Access code" style="text-transform:uppercase;letter-spacing:.08em"><button id="codeBtn">Continue</button></form>
+    <b>Please enter your FC token to continue.</b>
+    <small>Use <b>/mytoken</b> in any Slack channel to fetch your unique token. Send the command again if it says "Operation Timeout".</small>
+    <ol style="margin:10px 0 12px;padding-left:20px;font-size:13px;color:var(--ink-2);line-height:1.6;text-align:left">
+      <li>Type <b>/mytoken</b> in any Slack channel. You can type it in DMs also.</li>
+      <li>Press Enter twice to send the command.</li>
+      <li>The message will only be visible to you.</li>
+    </ol>
+    <form id="codeForm"><input id="codeInput" type="text" placeholder="FC token" required autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="12" aria-label="FC token" style="text-transform:uppercase;letter-spacing:.08em"><button id="codeBtn">Continue</button></form>
     <p style="margin:10px 0 0;font-size:13px"><a href="#" id="codeBack">Use a different email</a></p>
   </div>
 </main>
@@ -106,9 +111,9 @@ if (alreadyIn) {
     const b = $("codeBtn"); b.disabled = true; b.textContent = "Checking…";
     LMS.signInWithCode($("demoEmail").value.trim(), $("codeInput").value).then(done).catch(err => {
       b.disabled = false; b.textContent = "Continue";
-      showError(err && err.message === "code-inactive" ? "This access code is no longer active. Please contact Salesops."
-        : err && err.message === "code-invalid" ? "That access code isn't recognised. Check it and try again."
-        : "Couldn't check your code right now. Please try again in a moment.");
+      showError(err && err.message === "code-inactive" ? "This FC token is no longer active. Please contact Salesops."
+        : err && err.message === "code-invalid" ? "That FC token isn't recognised. Run /mytoken in Slack again and check it."
+        : "Couldn't check your token right now. Please try again in a moment.");
     });
   };
 } else {
