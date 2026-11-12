@@ -1851,7 +1851,7 @@ function scoreTopup(){
 }
 function scoreTransfer(){
   const T=S.transfers, W={name:"luzon packaging supplies", number:"004512345678", bank:"BDO", amt:85000};
-  const toRight=t=>norm(t.contact)===W.name && t.number===W.number && t.bank===W.bank;
+  const toRight=t=>t.number===W.number && t.bank===W.bank;   // the contact's display name can be a nickname (e.g. "LPS"); the bank and account number decide where the money goes
   const best=T.find(t=>toRight(t)&&t.amt===W.amt) || T.find(toRight) || T[0];
   const items=[], critical=[];
   items.push({label:"Transfer sent", expected:"1 single transfer completed with OTP", actual:T.length?`${T.length} transfer${T.length>1?"s":""} sent`:"No transfer sent", ok:!!best, pts:best?5:0, max:5});
@@ -1895,8 +1895,8 @@ function computeResults(){
     const r=SCORERS[t.id]();
     let pts=r.items.reduce((a,b)=>a+b.pts,0);
     if(st==="skipped") pts=0;
-    if(r.critical.length) pts=0;
-    out.push({task:t, status:st, items:r.items, critical:r.critical, pts, max:t.points});
+    /* No "critical errors": a mistake only loses the points of that check. It never zeroes the request or blocks a pass. */
+    out.push({task:t, status:st, items:r.items, critical:[], pts, max:t.points});
   });
   return out;
 }
@@ -1957,7 +1957,7 @@ function buildNotes(res, total, max, pass, timeUp){
   if(smallMiss.length>=3) N.push("Small detail errors across several requests. The process knowledge looks fine; the pattern is not double-checking against the client's message.");
   if(!skipped.length&&!untouched.length&&!N.length&&fullOk.length===scored.length) N.push("All requests done correctly. Well done.");
   const critAny=scored.some(r=>r.critical.length);
-  const head=`Score ${total}/${max} (${pct}%): ${pass?"PASS":"NOT YET"}.`+(pass?"":(critAny&&pct>=PASS_MARK*100?" The score is above the pass mark but a critical error blocks a pass.":` Pass mark is ${Math.round(PASS_MARK*100)}% with no critical errors.`));
+  const head=`Score ${total}/${max} (${pct}%): ${pass?"PASS":"NOT YET"}.`+(pass?"":(critAny&&pct>=PASS_MARK*100?" The score is above the pass mark but a critical error blocks a pass.":` Pass mark is ${Math.round(PASS_MARK*100)}%.`));
   return {head, notes:N};
 }
 function buildBreakdown(res){
@@ -1993,7 +1993,7 @@ function finish(timeUp){
     <h2>${timeUp?"Time's up! ":""}Exam results</h2>
     <p>${esc(EX.amName||"Account Manager")} · Time used: ${mmss(Math.min(elapsed(),EXAM_MINUTES*60))} of ${EXAM_MINUTES}:00</p>
     <div><span class="big-score">${total}/${max}</span><span class="verdict ${pass?"pass":"fail"}">${pass?"PASS":"NOT YET"}</span></div>
-    <p class="hint" style="margin-top:8px">Pass mark is ${Math.round(PASS_MARK*100)}% with no critical errors. Names ignore capitalization and extra spaces, but spelling and numbers must be exact.</p>
+    <p class="hint" style="margin-top:8px">Pass mark is ${Math.round(PASS_MARK*100)}%. Names ignore capitalization and extra spaces, but spelling and numbers must be exact.</p>
     <div style="overflow-x:auto"><table class="res"><thead><tr><th>Check</th><th>Expected</th><th>What was saved</th><th>Points</th></tr></thead><tbody>${rows}</tbody></table></div>
     ${nb?`<p class="hint">Not scored in this build: ${nb}.</p>`:""}
     <h3 style="margin:18px 0 6px">Score and notes</h3>
