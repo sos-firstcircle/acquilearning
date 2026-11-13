@@ -57,6 +57,9 @@ const RETAKE_BATCHES = ["000001", "000002"];
 // Status "inactive" (or anything other than blank / "active") blocks that code. If the tab is missing or empty, codes are off and the shared login works as before.
 const CODE_BATCHES = ["000002"];
 const CODES_SHEET = "Codes";
+// One row per sign-in with an access code (not per page load).
+const LOGINS_SHEET = "Logins";
+const LOGINS_HEADER = ["Timestamp", "Name", "Token", "Email"];
 
 const GRADES_SHEET = "Grades";      // one row per scored attempt
 const PROGRESS_SHEET = "Progress";  // one row per completed task/lesson
@@ -96,7 +99,10 @@ function doPost(e) {
     const p = req.payload || {};
 
     if (req.action === "verify") return json_({ ok: true, email: user.email });
-    if (req.action === "checkCode") return json_({ ok: true, email: user.email, name: user.name, coded: !!user.coded });   // checkEmail_ above already threw if the code is wrong or inactive
+    if (req.action === "checkCode") {         // checkEmail_ above already threw if the code is wrong or inactive
+      if (user.coded) { try { appendByHeader_(sheet_(LOGINS_SHEET, LOGINS_HEADER), { "Timestamp": new Date(), "Name": user.name, "Token": String(req.code || "").trim().toUpperCase(), "Email": user.email }); } catch (e) {} }
+      return json_({ ok: true, email: user.email, name: user.name, coded: !!user.coded });
+    }
 
     if (req.action === "saveResult") {
       if (RETAKE_BATCHES.indexOf(user.batch) === -1 && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id; })) {

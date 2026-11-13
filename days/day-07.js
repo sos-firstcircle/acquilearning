@@ -4,6 +4,7 @@
 LMS_DAY_DEFS[7] = {
   opens: { "110926": "2026-11-17" },   // batch 110926: stays locked until this date (Manila time), even if Day 6 is done
   title: "Acqui Service Exam",
+  titles: { "110926": "ASEAN Summit 2026 Holiday" },   // batch 110926 sees this day name instead of title
   brief: "Please contact your training manager (Reyster) for what to expect.",
   tasks: [
     { id: "d7-message-reyster", label: "Message Reyster (Training Manager) about what to expect" }
