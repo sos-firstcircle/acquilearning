@@ -48,5 +48,10 @@ window.LMS_SESSIONS = [
   { id:"s-d4-virtual", batch:"110926", title:"Day 4: Onboarding [Virtual] - Intro to Acqui Service Part 1", when:"2026-11-12T14:30", minutes:180, room:"", link:"https://meet.google.com/znc-stnp-owm",
     desc:"Introduction discussion to our in-house CRM, Acquisitions Service (Acqui Service/ACQ SVC)." },
   { id:"s-d5-virtual", batch:"110926", title:"Day 5: Onboarding [Virtual] - Intro to Acqui Service Part 2", when:"2026-11-13T10:00", minutes:120, room:"", link:"https://meet.google.com/tnd-krwh-qgu",
-    desc:"Hands-on follow-up to Part 1. We go through the Acqui Service demos and practice checks (tour, lead reassignment, lead creation, registering a referrer in Slack), answer your questions, and review Product Knowledge Examination 3." }
+    desc:"Hands-on follow-up to Part 1. We go through the Acqui Service demos and practice checks (tour, lead reassignment, lead creation, registering a referrer in Slack), answer your questions, and review Product Knowledge Examination 3." },
+  // Nov 19-20: batch 110926 does the Day 6 and Day 7 sessions on the Day 9 and Day 10 dates (their Days 6-8 were a holiday)
+  { id:"s-d6-self", batch:"110926", title:"Day 6: Onboarding [Self Pace] - Navigate Acqui Service Demo", when:"2026-11-19T09:00", minutes:165, room:"", link:"", desc:"" },
+  { id:"s-d6-virtual", batch:"110926", title:"Day 6: Onboarding [Virtual] - ACQ SVC Continuation and Simulation Exam", when:"2026-11-19T14:00", minutes:210, room:"", link:"https://meet.google.com/hmv-qkqk-nfr", desc:"" },
+  { id:"s-d7-discussion", batch:"110926", title:"Day 7: Onboarding [Virtual] - Prospecting Call Discussion", when:"2026-11-20T10:00", minutes:120, room:"", link:"https://meet.google.com/mtv-mhar-bgx", desc:"" },
+  { id:"s-d7-sim", batch:"110926", title:"Day 7: Onboarding [Virtual] - Prospecting Call Live Simulation Exam", when:"2026-11-20T14:30", minutes:150, room:"", link:"https://meet.google.com/kuj-nnrr-tsv", desc:"" }
 ];

@@ -5,7 +5,7 @@
 (function(){
   /* An exam file can set window.ACQUI_EXAM = { title, intro, taskId, nextHref, nextLabel, tasks } before this file loads. Without it, this is the navigation check. */
   var CFG = window.ACQUI_EXAM || {};
-  var PASS = 80, HINT_COST = 0.5, WRONG_COST = 0.25, SCALE = CFG.scale || 1;   /* costs are fractions of one question; SCALE = points per question */
+  var G = !!CFG.graded, PASS = CFG.passing || 80, HINT_COST = 0.5, WRONG_COST = 0.25, SCALE = CFG.scale || 1;   /* costs are fractions of one question; SCALE = points per question */
   var st = document.createElement("style");
   st.textContent =
     "#ex{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;width:780px;max-width:94vw;background:#fff;border-radius:16px;box-shadow:0 14px 50px rgba(0,0,0,.4);padding:16px 22px;z-index:1000;border-top:5px solid var(--teal)}" +
@@ -123,17 +123,27 @@
   var TASK_ID = CFG.taskId || "d5-acqui-practice", NEXT_HREF = CFG.nextHref || "acqui-tour.html", NEXT_LABEL = CFG.nextLabel || "Review the tour";
   var AM_NAME = "", n = 0, res = [], flags = {}, hintUsed = false, wrongs = 0, loss = 0, started = 0, state = "idle", picked = null;
 
+  var timedOut = false, tmEl = null, tmId = null;
+  function startTimer(){
+    timedOut = false; stopTimer();
+    tmEl = document.createElement("div"); tmEl.style.cssText = "position:fixed;top:10px;left:50%;transform:translateX(-50%);z-index:1210;background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 16px;font-weight:800;font-size:16px;font-variant-numeric:tabular-nums;box-shadow:0 4px 14px rgba(0,0,0,.18)";
+    document.body.appendChild(tmEl);
+    var end = started + CFG.minutes * 60000;
+    var tick = function(){ var left = Math.max(0, Math.round((end - Date.now()) / 1000)); tmEl.textContent = "⏱ " + Math.floor(left / 60) + ":" + ("0" + (left % 60)).slice(-2); tmEl.style.color = left <= 120 ? "#b3243a" : "#17323a"; if (left <= 0) { stopTimer(); if (state !== "idle") { timedOut = true; ACQUI.emit("finish-test"); } } };
+    tick(); tmId = setInterval(tick, 1000);
+  }
+  function stopTimer(){ clearInterval(tmId); if (tmEl) { tmEl.remove(); tmEl = null; } }
   function esc(s){ return String(s).replace(/</g, "&lt;"); }
   function fmtPts(x){ return (Math.round(x * SCALE * 100) / 100).toString(); }
   function pointsNow(raw){ return Math.max(0, (raw == null ? 1 : raw) - (hintUsed ? HINT_COST : 0) - loss); }
 
   function intro(){
     state = "idle"; dim.style.display = "block"; box.className = "full"; document.body.classList.remove("xp-on");
-    box.innerHTML = '<div class="k">Practice check · not graded</div><h2>' + esc(CFG.title || "Find your way around Acqui Service") + '</h2>' +
+    box.innerHTML = '<div class="k">' + (G ? 'Graded exam · ' + CFG.minutes + ' minutes' : 'Practice check · not graded') + '</div><h2>' + esc(CFG.title || "Find your way around Acqui Service") + '</h2>' +
       '<p style="font-size:15px;line-height:1.55;margin:8px 0 10px">' + (CFG.intro || ('You will get ' + TASKS.length + ' short situations, one at a time. Use the simulation behind this box to find the answer or the right place. Some questions ask you to type or pick what you find.')) + '</p>' +
-      '<p style="font-size:14px;line-height:1.55;margin:0 0 14px;color:#456">' + (CFG.scoring || ('Every question starts with 1 point. A hint costs ' + fmtPts(HINT_COST) + ' point, and each wrong answer costs ' + fmtPts(WRONG_COST) + '.')) + ' This is practice, so your score is not recorded as a grade. Aim for ' + PASS + '% or more.</p>' +
+      '<p style="font-size:14px;line-height:1.55;margin:0 0 14px;color:#456">' + (CFG.scoring || ('Every question starts with 1 point. A hint costs ' + fmtPts(HINT_COST) + ' point, and each wrong answer costs ' + fmtPts(WRONG_COST) + '.')) + (G ? ' This exam is graded and you get one attempt. You have ' + CFG.minutes + ' minutes: the timer starts when you press Start, and unanswered questions get 0 when time is up. Pass mark ' + PASS + '%.' : ' This is practice, so your score is not recorded as a grade. Aim for ' + PASS + '% or more.') + '</p>' +
       (CFG.askName ? '<div style="background:#f4f8f8;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 14px"><div style="font-size:13px;line-height:1.5;color:#345;margin-bottom:8px"><b>Honor code.</b> I will answer this test on my own. I will not ask anyone for help, and I will not share the questions or answers.</div><label style="font-size:13px;font-weight:700">AM name: <input type="text" id="exname" placeholder="Type your name" autocomplete="off" style="margin-top:4px"></label><div style="font-size:11px;color:var(--mut);margin-top:4px">This is the name you will use in the Acqui Service simulation.</div></div>' : '') +
-      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + ' first</a>') + '</span><button class="btn dark" id="exgo">Start</button></div>';
+      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + ' first</a>') + '</span><button class="btn dark" id="exgo">Start</button></div>';
     document.body.appendChild(box);
     document.getElementById("exgo").onclick = function(){
       if (CFG.askName) {
@@ -144,7 +154,7 @@
       begin();
     };
   }
-  function begin(){ n = 0; res = []; started = Date.now(); TASKS.forEach(function(t){ if (t.reset) t.reset(); }); location.hash = "#/home"; dim.style.display = "none"; show(); }
+  function begin(){ n = 0; res = []; started = Date.now(); if (G) startTimer(); TASKS.forEach(function(t){ if (t.reset) t.reset(); }); location.hash = "#/home"; dim.style.display = "none"; show(); }
 
   function show(){
     flags = {}; hintUsed = false; wrongs = 0; loss = 0; picked = null; state = "asking"; box.className = "";
@@ -257,14 +267,16 @@
     var total = res.reduce(function(a, r){ return a + r.pts; }, 0), capped = Math.min(total, TASKS.length), pct = Math.round(capped / TASKS.length * 100), pass = pct >= PASS;
     var secs = Math.round((Date.now() - started) / 1000);
     box.className = "full"; dim.style.display = "block"; document.body.appendChild(box);
-    box.innerHTML = '<div class="k">Practice check · result' + (AM_NAME ? ' · ' + esc(AM_NAME) : '') + '</div><div class="big ' + (pass ? "ok" : "no") + '">' + pct + '%</div><div style="font-size:16px;font-weight:600">' + (pass ? "Passed" : "Not yet. Review the tour and try again.") + ' (' + fmtPts(capped) + ' / ' + (TASKS.length * SCALE) + ' points' + (total > TASKS.length ? ', bonus included, capped at ' + (TASKS.length * SCALE) : '') + ', ' + Math.floor(secs / 60) + 'm ' + (secs % 60) + 's)</div>' +
+    box.innerHTML = '<div class="k">' + (G ? 'Exam result' : 'Practice check · result') + '' + (AM_NAME ? ' · ' + esc(AM_NAME) : '') + '</div><div class="big ' + (pass ? "ok" : "no") + '">' + pct + '%</div><div style="font-size:16px;font-weight:600">' + (pass ? "Passed" : G ? "Not passed" : "Not yet. Review the tour and try again.") + ' (' + fmtPts(capped) + ' / ' + (TASKS.length * SCALE) + ' points' + (total > TASKS.length ? ', bonus included, capped at ' + (TASKS.length * SCALE) : '') + ', ' + Math.floor(secs / 60) + 'm ' + (secs % 60) + 's)</div>' +
       '<table>' + res.map(function(r){
         var why = r.how === "skipped" ? "skipped" : r.how === "wrong" ? "wrong" : r.how === "graded" ? (r.pts < 1 ? "partly right" : "") : [r.hint ? "hint" : "", r.wrongs ? r.wrongs + " wrong" : ""].filter(Boolean).join(", ");
         var bad = r.how === "skipped" || r.how === "wrong" || (r.how === "graded" && r.pts < 0.5);
         return '<tr><td style="width:24px" class="' + (bad ? "no" : "ok") + '">' + (bad ? "✗" : "✓") + '</td><td>' + esc(r.text) + (r.detail ? r.detail : "") + '</td><td style="white-space:nowrap;color:var(--mut)">' + why + '</td><td style="text-align:right"><b>' + fmtPts(r.pts) + '</b></td></tr>'; }).join("") + '</table>' +
-      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + '</a>') + '</span><button class="btn dark" id="exagain">Try again</button></div>';
-    document.getElementById("exagain").onclick = intro;
-    try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
+      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + '</a>') + '</span>' + (G && !(window.LMS && LMS.preview && LMS.preview()) ? '<a class="btn dark" href="../dashboard.html" id="exagain" style="text-decoration:none">Back to dashboard</a>' : '<button class="btn dark" id="exagain">Try again</button>') + '</div>';
+    if (!G || (window.LMS && LMS.preview && LMS.preview())) document.getElementById("exagain").onclick = intro;
+    stopTimer();
+    if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: TASKS.length, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return [r.text, r.pts, r.how]; }) }) }); } catch (err) {} }
+    else try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
     /* If this ever becomes graded: LMS.saveResult({ id:"d5-nav-check", label:"Acqui navigation check", score:total, max:TASKS.length, pct:pct, kind:"lms", passing:PASS }) */
     window.ACQUI_EXAM_RESULT = { name: AM_NAME, score: capped, max: TASKS.length, pct: pct, passed: pass, seconds: secs, tasks: res };
   }
@@ -296,7 +308,7 @@
       if (t.undo) t.undo();
     }
   }
-  ["render", "search-pick", "status-history", "lead-status-history", "orig-detail", "bcl-detail", "filter", "status-set", "referrer-open", "request-sent", "lead-created", "lead-create-blocked", "bookmark-open", "sec-search", "dti-search"].forEach(function(ev){
+  ["render", "search-pick", "status-history", "lead-status-history", "orig-detail", "bcl-detail", "filter", "status-set", "referrer-open", "request-sent", "lead-created", "lead-create-blocked", "bookmark-open", "sec-search", "dti-search"].concat(CFG.events || []).forEach(function(ev){
     ACQUI.on(ev, function(d){
       if (state !== "asking") return;
       var t = TASKS[n]; if (!t || (t.type !== "nav" && t.type !== "act")) return;
@@ -319,5 +331,12 @@
     var t = TASKS[n]; if (state !== "asking" || !t || !t.choice || flags.proceed) return true;
     toast("First choose one of the options in the panel: proceed or not."); return false;
   };
-  intro();
+  function taken(rec){
+    state = "idle"; dim.style.display = "block"; box.className = "full"; document.body.classList.remove("xp-on"); document.body.appendChild(box);
+    box.innerHTML = '<div class="k">Graded exam</div><h2>' + esc(CFG.title) + '</h2><p style="font-size:15px;line-height:1.55">You already took this exam, and it can only be taken once. Your score: <b>' + Math.round(rec.score / rec.max * 100) + '%</b>.</p><div class="row"><span></span><a class="btn dark" href="../dashboard.html" style="text-decoration:none">Back to dashboard</a></div>';
+  }
+  if (G && window.LMS && !(LMS.preview && LMS.preview())) {
+    var go = function(){ if (state !== "idle" || document.getElementById("exgo")) return; var rec = (LMS.progress() || {})[CFG.examId]; (rec && rec.status === "done" && !(LMS.canRetake && LMS.canRetake())) ? taken(rec) : intro(); };
+    dim.style.display = "block"; (LMS.ready || Promise.resolve()).then(go, go); setTimeout(go, 8000);
+  } else intro();
 })();
