@@ -76,7 +76,7 @@
   .exam span{font-size:13px;color:var(--ink-2)}
   .exam .acts{display:flex;gap:8px;flex-wrap:wrap}
   .lockmsg{font-size:14px;color:var(--ink-2);display:flex;gap:6px;align-items:center}
-  .brief{margin:10px 0 0;font-size:14px;color:var(--ink);line-height:1.5}
+  .brief{margin:10px 0 0;font-size:14px;color:var(--ink);line-height:1.5;white-space:pre-line}
   .brief small{display:block;font-size:12px;font-weight:600;color:var(--ink-3);margin-bottom:2px}
   .daydone{margin-top:16px;font-size:14px;color:var(--green);font-weight:600}
   .exam{margin-top:16px}
@@ -161,13 +161,15 @@ const LOCK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
    A day with no content yet can't be completed, so it keeps the days after it locked. Otherwise a day unlocks when the one before it is complete. */
 let selected = (+new URLSearchParams(location.search).get('day')) || null;   // the day whose dropdown is open (lessons link back with ?day=N)
 /* opens: { "<batch>": "YYYY-MM-DD" } on a day keeps it locked for that batch until midnight Manila time on that date (on top of the normal "finish the day before" rule). */
-const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[LMS.batchOf(u && u.email)]; return s ? new Date(s + "T00:00:00+08:00") : null; };
+const viewBatch = e => (LMS.config.viewAs || {})[LMS.batchOf(e)] || LMS.batchOf(e);   // viewAs in lms.js: a test batch sees another batch's view
+const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[viewBatch(u && u.email)]; return s ? new Date(s + "T00:00:00+08:00") : null; };
 const opensText = d => { const t = opensAt(d); return t ? t.toLocaleDateString("en-PH", { weekday:"short", month:"short", day:"numeric", timeZone:"Asia/Manila" }) : ""; };
 function compute(){
   const P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   let prevComplete = true, current = null;
-  const u = LMS.user(), catchDays = (LMS.config.catchUp || {})[LMS.batchOf(u && u.email)] || [];
-  const days = window.LMS_DAYS.map(d => {
+  const u = LMS.user(), catchDays = (LMS.config.catchUp || {})[viewBatch(u && u.email)] || [];
+  const days = window.LMS_DAYS.map(d0 => {
+    const t = d0.titles && d0.titles[viewBatch(u && u.email)], d = t ? { ...d0, title: t } : d0;   // titles: { batch: "..." } = per-batch day name
     const at = opensAt(d);
     if (at && Date.now() < at.getTime()) { prevComplete = false; return { ...d, empty: !d.tasks.length && !(d.materials||[]).length && !d.exams.length, tasksDone: 0, status: "locked", notYet: true }; }   // its date hasn't come yet
     const catchUp = catchDays.includes(d.day), manual = catchUp && done("catchup-d" + d.day);   // marked done by hand
@@ -209,6 +211,7 @@ function dropdown(sel, P){
   if (sel.status === "locked" && !adminOpen) return `<div class="drop"><div class="lockmsg">${LOCK} ${sel.notYet ? `This day opens on ${esc(opensText(sel))}.` : `Complete day ${sel.day-1} to unlock this day.`}</div>${brief}</div>`;
   if (sel.empty) return `<div class="drop">${brief}<p class="empty" style="margin-top:${brief?8:0}px">Content coming soon.</p>${catchBtn(sel)}</div>`;
   const taskLi = t => {
+    if (t.locked) return `<li><label style="cursor:default;opacity:.75"><span style="width:16px;flex:none">${LOCK}</span>${t.openLabel ? `<span class="kind">${esc(t.openLabel)}</span>` : ""}<span>${esc(t.label)}</span><span class="open" style="opacity:.6;cursor:not-allowed;pointer-events:none">Locked</span></label></li>`;   // locked: true = not ready yet, shown as a grey "Locked" button, no tick box (the day stays incomplete)
     const isDone = P[t.id] && P[t.id].status === "done";
     return `<li><label><input type="checkbox" data-task="${t.id}" ${isDone?"checked":""}>${t.openLabel ? `<span class="kind">${esc(t.openLabel)}</span>` : ""}<span>${esc(t.label)}</span>
       ${t.href ? `<a class="open" href="${esc(t.href)}" ${/^https?:/.test(t.href)?'target="_blank" rel="noopener"':""} data-open="${t.id}">Open</a>` : ""}</label></li>`;
@@ -222,7 +225,7 @@ function dropdown(sel, P){
       ? `<li><a ${m.dl?'class="dl"':m.link?'class="lk"':""} href="${esc(m.href)}" ${m.download?`download="${esc(m.download)}"`:""} target="${(m.dl||/^https?:/.test(m.href))?"_blank":"_self"}" rel="noopener">${esc(m.label)}</a></li>`
       : `<li><span>${esc(m.label)}</span><span class="soon">Link coming soon</span></li>`).join("")}</ul>` : "";
   const examCard = e => {
-    if (e.soon) return `<div class="exam" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--marigold-soft)"><div><b>${esc(e.label)}</b><br><span class="small muted">${e.desc ? esc(e.desc) : "Questions coming soon."}</span></div><span class="pillsoon">Soon</span></div>`;
+    if (e.soon) return `<div class="exam" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--marigold-soft)"><div><b>${esc(e.label)}</b><br><span class="small muted">${e.desc ? esc(e.desc) : "Questions coming soon."}</span></div>${e.lockBtn ? `<button class="btn sm" disabled style="opacity:.6;cursor:not-allowed">${LOCK} Locked</button>` : `<span class="pillsoon">Soon</span>`}</div>`;   // lockBtn: true shows a disabled "Locked" button instead of the Soon pill
     const rec = P[e.id], sub = rec && rec.status === "done";
     const scoreTxt = rec && rec.max ? `Score: ${rec.score}/${rec.max}` : (e.kind==="trainer" ? "Scored live by your trainer." : "");
     if (sub) return `<div class="exam ok" style="display:flex;gap:16px;align-items:center;justify-content:space-between;flex-wrap:wrap;border-radius:12px;padding:14px 16px;background:var(--green-soft)"><div><b>${ico("check",14)} ${esc(e.label)} done</b><br><span class="small muted">${scoreTxt}</span></div>${(e.kind==="lms"||e.kind==="sim")&&e.href?`<div style="display:flex;gap:8px;flex-wrap:wrap">${e.kind==="lms"&&!LMS.canReview()?"":`<a class="btn sm" href="${esc(e.href)}${e.kind==="lms"?(e.href.includes("?")?"&":"?")+"review=1":""}">${e.kind==="sim"?"Review your result":"Review your answers"}</a>`}${LMS.canRetake()?`<a class="btn sm primary" href="${esc(e.href)}${e.kind==="lms"?(e.href.includes("?")?"&":"?")+"retake=1":""}">Retake</a>`:""}</div>`:""}</div>`;
@@ -275,7 +278,7 @@ function sessionTime(s){
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`;
 }
 // Sessions for this person's batch only (admins and other batches see none). A session with no batch is for everyone.
-const mySessions = () => (window.LMS_SESSIONS||[]).filter(s => !s.batch || [].concat(s.batch).includes(LMS.batchOf((LMS.user()||{}).email)));
+const mySessions = () => (window.LMS_SESSIONS||[]).filter(s => !s.batch || [].concat(s.batch).includes(viewBatch((LMS.user()||{}).email)));
 function daySessions(sel){
   const list = (sel.sessions||[]).map(id => mySessions().find(x => x.id === id)).filter(Boolean);
   if (!list.length) return "";

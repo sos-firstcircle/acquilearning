@@ -33,6 +33,7 @@ window.LMS_CONFIG = {
   codeLogin: ["000002"],              // shared-login batches that also need a personal access code (checked by the Sheet's "Codes" tab; the codes are never in this repo)
   honorCode: ["000002"],              // batches that share one login: exams ask for a typed name first (saved with the result as a Note)
   noReview: ["000002"],               // batches that can retake but cannot reopen their last answers/result
+  viewAs: { "000001": "110926" },   // this batch sees the dashboard (days opening dates, day names, sessions) of another batch; everything else (retakes, grades) stays its own. Test batch for Hanna.
   catchUp: {},                        // e.g. { "101926": [1, 2, 3] }
   adminEmails: [],                    // who can open admin.html, e.g. ["tm.name@firstcircle.com"]
 
