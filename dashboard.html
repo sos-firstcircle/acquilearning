@@ -160,11 +160,16 @@ const LOCK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
    A day is complete when every task is ticked and its exam (if any) is done.
    A day with no content yet can't be completed, so it keeps the days after it locked. Otherwise a day unlocks when the one before it is complete. */
 let selected = (+new URLSearchParams(location.search).get('day')) || null;   // the day whose dropdown is open (lessons link back with ?day=N)
+/* opens: { "<batch>": "YYYY-MM-DD" } on a day keeps it locked for that batch until midnight Manila time on that date (on top of the normal "finish the day before" rule). */
+const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[LMS.batchOf(u && u.email)]; return s ? new Date(s + "T00:00:00+08:00") : null; };
+const opensText = d => { const t = opensAt(d); return t ? t.toLocaleDateString("en-PH", { weekday:"short", month:"short", day:"numeric", timeZone:"Asia/Manila" }) : ""; };
 function compute(){
   const P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   let prevComplete = true, current = null;
   const u = LMS.user(), catchDays = (LMS.config.catchUp || {})[LMS.batchOf(u && u.email)] || [];
   const days = window.LMS_DAYS.map(d => {
+    const at = opensAt(d);
+    if (at && Date.now() < at.getTime()) { prevComplete = false; return { ...d, empty: !d.tasks.length && !(d.materials||[]).length && !d.exams.length, tasksDone: 0, status: "locked", notYet: true }; }   // its date hasn't come yet
     const catchUp = catchDays.includes(d.day), manual = catchUp && done("catchup-d" + d.day);   // marked done by hand
     const empty = !d.tasks.length && !(d.materials||[]).length && !d.exams.length;
     if (empty) {                       // no content yet: follows the lock chain but can't be completed (unless marked done by hand)
@@ -201,7 +206,7 @@ function catchBtn(sel){
 function dropdown(sel, P){
   const brief = sel.brief ? `<p class="brief"><small>What to expect</small>${esc(sel.brief)}</p>` : "";
   const adminOpen = sel.status === "locked" && LMS.isAdmin();   // admins can open every day; trainees see it locked
-  if (sel.status === "locked" && !adminOpen) return `<div class="drop"><div class="lockmsg">${LOCK} Complete day ${sel.day-1} to unlock this day.</div>${brief}</div>`;
+  if (sel.status === "locked" && !adminOpen) return `<div class="drop"><div class="lockmsg">${LOCK} ${sel.notYet ? `This day opens on ${esc(opensText(sel))}.` : `Complete day ${sel.day-1} to unlock this day.`}</div>${brief}</div>`;
   if (sel.empty) return `<div class="drop">${brief}<p class="empty" style="margin-top:${brief?8:0}px">Content coming soon.</p>${catchBtn(sel)}</div>`;
   const taskLi = t => {
     const isDone = P[t.id] && P[t.id].status === "done";

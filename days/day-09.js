@@ -1,5 +1,6 @@
 /* Day 9. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[9] = {
+  opens: { "110926": "2026-11-19" },   // batch 110926: stays locked until this date (Manila time), even if Day 8 is done
   title: "Role-Play Assessment",
   brief: "Client-facing role-play: discovery, objection, close.",
   tasks: [],
