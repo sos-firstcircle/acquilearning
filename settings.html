@@ -37,6 +37,9 @@
   .linkbtn{border:0;background:none;color:var(--teal-dark);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 4px}
   .linkbtn.red{color:var(--coral)}
   .orgrow{border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px;background:#fff}
+  .orgrow.over{border-color:var(--teal);background:var(--teal-soft)}
+  td.grip{cursor:grab;color:var(--ink-3);width:14px;padding-right:0;user-select:none}
+  tr[draggable="true"]:active{cursor:grabbing}
   .orgrow h3{font-size:15px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
   .orgrow .t{margin-top:10px}
   .addp{border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;background:var(--mist)}
@@ -65,7 +68,7 @@ function start(){
   const TABS = [["general","General"],["people","People"],["teams","Teams"],["batches","Batches"]];
   let tab = (location.hash || "#general").slice(1); if (!TABS.some(t => t[0] === tab)) tab = "general";
   let D = null, loadErr = "";                       // { people, teams, batches, peopleLogin } from the Sheet
-  const S = { q:"", team:"", batch:"", removed:false, adding:false, edit:"", teamsDirty:false, batchesDirty:false, openBatch:"" };
+  const S = { q:"", team:"", batch:"", removed:false, adding:false, edit:"", teamsDirty:false, batchesDirty:false, openBatch:"", openTeam:"", dragK:-1 };
   let T = [], B = [];                               // working copies of Teams and Batches (saved with the Save button)
 
   const ACCESS_FIXED = ["Department", "General", "Admin", "Team Lead"];
@@ -194,19 +197,24 @@ function start(){
     const parentOpts = (cur, self) => `<option value="">No parent</option>${teamNames().filter(t => t !== self).map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("")}`;
     const rowBlock = (r, i) => {
       const ts = T.map((t, k) => ({ ...t, k })).filter(t => t.row === r && t.team).sort((a, b) => a.team.localeCompare(b.team));
-      return `<div class="orgrow"><h3>Row ${i + 1}<span class="row" style="gap:4px"><button class="linkbtn" data-rowabove="${r}">Add row above</button><button class="linkbtn" data-rowbelow="${r}">Add row below</button></span></h3>
-        <div class="tw" style="margin-top:10px"><table class="t"><thead><tr><th>Team</th><th>Lead</th><th>Parent team</th><th>People</th><th>Move to</th><th></th></tr></thead><tbody>
-        ${ts.map(t => `<tr><td><b>${esc(t.team)}</b></td>
+      return `<div class="orgrow" data-droprow="${r}"><h3>Row ${i + 1}<span class="row" style="gap:4px"><button class="linkbtn" data-rowabove="${r}">Add row above</button><button class="linkbtn" data-rowbelow="${r}">Add row below</button></span></h3>
+        <div class="tw" style="margin-top:10px"><table class="t"><thead><tr><th></th><th>Team</th><th>Lead</th><th>Parent team</th><th>People</th><th></th></tr></thead><tbody>
+        ${ts.map(t => `<tr draggable="true" data-drag="${t.k}"><td class="grip" title="Drag to another row">⠿</td><td><b>${esc(t.team)}</b></td>
           <td><select data-lead="${t.k}">${leadOpts(t.lead)}</select></td>
           <td><select data-parent="${t.k}">${parentOpts(t.parent, t.team)}</select></td>
-          <td>${membersOf(t.team).length}</td>
-          <td><select data-move="${t.k}">${rows.map((x, j) => `<option value="${x}" ${x === r ? "selected" : ""}>Row ${j + 1}</option>`).join("")}</select></td>
-          <td class="act"><button class="linkbtn" data-rename="${t.k}">Rename</button><button class="linkbtn red" data-tdel="${t.k}">Delete</button></td></tr>`).join("") || `<tr><td colspan="6" class="count">No teams yet. Add one below, or this row disappears when you save.</td></tr>`}
+          <td><button class="linkbtn" data-topen="${esc(t.team)}">${membersOf(t.team).length} ${S.openTeam === t.team ? "▲" : "▼"}</button></td>
+          <td class="act"><button class="linkbtn" data-rename="${t.k}">Rename</button><button class="linkbtn red" data-tdel="${t.k}">Delete</button></td></tr>
+          ${S.openTeam === t.team ? teamPeople(t.team) : ""}`).join("") || `<tr><td colspan="6" class="count">No teams yet. Add one below, or this row disappears when you save.</td></tr>`}
         </tbody></table></div>
         <div class="row" style="margin-top:10px"><input placeholder="New team name" data-newteam="${r}" style="min-width:200px"><button class="btn sm" data-addteam="${r}">Add team</button></div></div>`;
     };
+    const teamPeople = team => `<tr><td></td><td colspan="5" style="background:var(--mist)">
+        <div>${membersOf(team).sort((a, b) => a.name.localeCompare(b.name)).map(p => `<span class="chip">${esc(p.name)} <button class="linkbtn red" style="padding:0 2px" title="Take out of ${esc(team)}" data-tout="${esc(p.email)}">×</button></span>`).join(" ") || `<span class="count">Nobody in this team yet.</span>`}</div>
+        <div class="row" style="margin-top:10px"><input list="peopleList" data-tadd="${esc(team)}" placeholder="Name or email (new emails are added)" style="min-width:280px;flex:1;max-width:420px"><button class="btn sm" data-taddbtn="${esc(team)}">Add to ${esc(team)}</button></div>
+        <datalist id="peopleList">${activePeople().filter(p => p.team !== team).sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${esc(p.email)}">${esc(p.name)}${p.team ? " · " + esc(p.team) : ""}</option>`).join("")}</datalist>
+        <div class="count" style="margin-top:6px">Adding someone already on the list moves them here from their current team. Changes here save right away.</div></td></tr>`;
     const unknown = [...new Set(activePeople().map(p => p.team).filter(t => t && !teamNames().includes(t)))];
-    pane.innerHTML = `<p class="lead" style="margin-top:0">Teams show on the org chart row by row, A to Z. Anyone set as a team's Lead gets Team Lead access automatically.</p>
+    pane.innerHTML = `<p class="lead" style="margin-top:0">Teams show on the org chart row by row, A to Z. Drag a team (⠿) to move it to another row. Anyone set as a team's Lead gets Team Lead access automatically.</p>
       ${unknown.length ? `<div class="warn">People are in teams that aren't listed here: ${unknown.map(esc).join(", ")}. Add them as teams, or change those people's team.</div>` : ""}
       ${rows.map(rowBlock).join("") || `<p class="count">No rows yet.</p><button class="btn sm" data-rowbelow="0">Add a row</button>`}
       <div class="row" style="position:sticky;bottom:0;background:#fff;padding:12px 0;border-top:1px solid var(--line)"><button class="btn primary" id="teamsSave" ${S.teamsDirty ? "" : "disabled"}>Save teams</button>${S.teamsDirty ? `<button class="btn" id="teamsUndo">Discard changes</button><span class="badge">Not saved yet</span>` : `<span class="count">All changes saved.</span>`}</div>
@@ -314,6 +322,33 @@ function start(){
       if (!r || !r.ok) return msg("msgTeams", errText(r), false);
       await load(); msg("msgTeams", `Renamed to ${to} (${r.moved} people moved).`, true); return;
     }
+    if (t.dataset.topen) { S.openTeam = S.openTeam === t.dataset.topen ? "" : t.dataset.topen; renderTeams(pane); return; }
+    if (t.dataset.tout) {
+      const p = D.people.find(x => x.email === t.dataset.tout);
+      if (!confirm(`Take ${p.name} out of ${p.team}? They stay on the People list with no team.`)) return;
+      t.disabled = true; const r = await LMS.peopleUpdate(p.email, { team: "" });
+      if (!r || !r.ok) { t.disabled = false; return msg("msgTeams", errText(r), false); }
+      const team = p.team; p.team = ""; renderTeams(pane); msg("msgTeams", `${p.name} is no longer in ${team}.`, true); return;
+    }
+    if (t.dataset.taddbtn) {
+      const team = t.dataset.taddbtn, inp = document.querySelector(`[data-tadd="${CSS.escape(team)}"]`), v = inp.value.trim().toLowerCase();
+      if (!v) return;
+      const p = D.people.find(x => x.email === v || x.name.toLowerCase() === v);
+      t.disabled = true; msg("msgTeams", "Saving…", true);
+      if (p) {
+        const r = await LMS.peopleUpdate(p.email, p.active ? { team } : { team });
+        if (r && r.ok && !p.active) await LMS.peopleAdd([{ email: p.email }]);
+        t.disabled = false; if (!r || !r.ok) return msg("msgTeams", errText(r), false);
+        const from = p.team; p.team = team; p.active = true; p.status = "Active"; renderTeams(pane);
+        return msg("msgTeams", `${p.name} moved to ${team}${from && from !== team ? ` (was ${from})` : ""}.`, true);
+      }
+      if (!/^[^@\s]+@firstcircle\.com$/.test(v)) { t.disabled = false; return msg("msgTeams", "Not on the list. Type their First Circle email to add them.", false); }
+      const r = await LMS.peopleAdd([{ email: v, team, access: "Department" }]);
+      t.disabled = false; if (!r || !r.ok) return msg("msgTeams", errText(r), false);
+      const nm = v.split("@")[0].split(/[._-]/).filter(Boolean).map(w => w[0].toUpperCase() + w.slice(1)).join(" ");   // same as the Sheet's default name
+      D.people.push({ email: v, name: nm, role: "Acquisition Manager", team, status: "Active", active: true, access: ["Department"], batch: "" });
+      renderTeams(pane); msg("msgTeams", `Added ${nm} (${v}) to ${team}. Fix their name or access on the People tab.`, true); return;   // keeps unsaved team changes
+    }
     if (t.id === "teamsUndo") { T = D.teams.map(x => ({ ...x })); S.teamsDirty = false; renderTeams(pane); return; }
     if (t.id === "teamsSave") {
       const rows = [...new Set(T.filter(x => x.team).map(x => x.row))].sort((a, b) => a - b);   // renumber rows 1, 2, 3… (empty rows drop out)
@@ -349,12 +384,18 @@ function start(){
     if (t.id === "premoved") { S.removed = t.checked; renderPeople(pane); }
     if (t.dataset.lead !== undefined) { T[+t.dataset.lead].lead = t.value; S.teamsDirty = true; renderTeams(pane); }
     if (t.dataset.parent !== undefined) { T[+t.dataset.parent].parent = t.value; S.teamsDirty = true; renderTeams(pane); }
-    if (t.dataset.move !== undefined) { T[+t.dataset.move].row = +t.value; S.teamsDirty = true; renderTeams(pane); }
     if (t.dataset.btype !== undefined) { B[+t.dataset.btype].type = t.value; S.batchesDirty = true; renderBatches(pane); }
     if (t.dataset.bstart !== undefined) { B[+t.dataset.bstart].start = t.value; S.batchesDirty = true; renderBatches(pane); }
     if (t.dataset.bretake !== undefined) { B[+t.dataset.bretake].retake = t.checked; S.batchesDirty = true; renderBatches(pane); }
     if (t.dataset.bname !== undefined) { B[+t.dataset.bname].name = t.value.trim(); S.batchesDirty = true; renderBatches(pane); }
   });
+  // Teams: drag a team to another row
+  app.addEventListener("dragstart", e => { const tr = e.target.closest && e.target.closest("[data-drag]"); if (!tr) return; S.dragK = +tr.dataset.drag; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", tr.dataset.drag); } catch (x) {} tr.style.opacity = ".4"; });
+  app.addEventListener("dragend", e => { const tr = e.target.closest && e.target.closest("[data-drag]"); if (tr) tr.style.opacity = ""; document.querySelectorAll(".orgrow.over").forEach(x => x.classList.remove("over")); });
+  app.addEventListener("dragover", e => { const box = e.target.closest && e.target.closest("[data-droprow]"); if (!box || S.dragK < 0) return; e.preventDefault(); document.querySelectorAll(".orgrow.over").forEach(x => x !== box && x.classList.remove("over")); box.classList.add("over"); });
+  app.addEventListener("drop", e => { const box = e.target.closest && e.target.closest("[data-droprow]"); if (!box || S.dragK < 0) return; e.preventDefault();
+    const r = +box.dataset.droprow, x = T[S.dragK]; S.dragK = -1; if (!x || x.row === r) { renderTeams(document.getElementById("pane")); return; }
+    T = T.filter(y => !(y.empty && y.row === r)); x.row = r; S.teamsDirty = true; renderTeams(document.getElementById("pane")); });
   window.addEventListener("beforeunload", e => { if (S.teamsDirty || S.batchesDirty) { e.preventDefault(); e.returnValue = ""; } });
 
   render(); load();

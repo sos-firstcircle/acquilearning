@@ -118,45 +118,60 @@
   <main class="main"><div class="wrap" id="app"></div></main>
 </div>
 <script>
+/* Team directory. Drawn from the Sheet (People + Teams tabs, edited in Settings) via LMS.directory();
+   department/directory.js is only the fallback while the Sheet loads or if it can't be reached. */
 const D = window.DEPT_DIRECTORY;
-const card = (p, cls) => `<div class="p ${cls || p[3] || ""}" data-q="${esc((p[0] + " " + (p[1] || "Acquisition Manager") + " " + (p[2] || "")).toLowerCase())}">
-  <b>${esc(p[0])}</b><span>${esc(p[1] || "Acquisition Manager")}</span>${p[2] ? `<em>${esc(p[2])}</em>` : ""}</div>`;
+const ROLE0 = "Acquisition Manager";   // default role (directory.js already uses the name AM)
+/* Model: rows = [[{ name, lead: [name, role] | null, parent, members: [[name, role, note, cls]] }]] */
+function modelFromFile() {
+  const team = (name, members, lead) => ({ name, lead: lead || null, parent: "", members });
+  const rows = [[team("Leadership", D.leadership)], [team("Sales Operations", D.salesOps), team("BDM", D.sosBdm), team("Partnerships", D.partners)]];
+  const r3 = [team("Top Gun", D.topGun.flatMap(t => [t.am, [t.sdr[0], t.sdr[1]]]))];
+  D.teams.forEach(t => (t.columns ? t.columns.map(c => team(c.name, c.members, t.leader)) : [team(t.name, t.members, t.leader)]).forEach(x => r3.push(x)));
+  rows.push(r3.sort((a, b) => a.name.localeCompare(b.name)));
+  return rows;
+}
+function modelFromSheet(dir) {
+  dir = { ...dir, people: dir.people.filter(p => !/^test account$/i.test(p.role || "")) };   // test logins (Role "Test account") never show on the chart
+  const byTeam = {}, leads = {};
+  dir.teams.forEach(t => { if (t.lead) leads[t.lead.toLowerCase()] = true; });
+  dir.people.forEach(p => (byTeam[p.team || ""] = byTeam[p.team || ""] || []).push(p));
+  const asCard = p => [p.name, p.role || ROLE0, "", dir.latest && p.batch === dir.latest ? "new" : ""];
+  const rowsMap = {};
+  dir.teams.forEach(t => {
+    const lp = dir.people.find(p => p.name.toLowerCase() === String(t.lead || "").toLowerCase());
+    const members = (byTeam[t.team] || []).filter(p => !leads[p.name.toLowerCase()])   // a team lead shows on top of the team(s) they lead, not as a member anywhere.sort((a, b) => a.name.localeCompare(b.name)).map(asCard);
+    (rowsMap[t.row] = rowsMap[t.row] || []).push({ name: t.team, lead: t.lead ? [t.lead, (lp && lp.role) || "Team Leader", "", lp && dir.latest && lp.batch === dir.latest ? "new" : ""] : null, parent: t.parent, members });
+  });
+  const known = new Set(dir.teams.map(t => t.team));
+  const loose = dir.people.filter(p => (!p.team || !known.has(p.team)) && !leads[p.name.toLowerCase()]);   // no team, or a team that isn't on the Teams tab
+  if (loose.length) (rowsMap[2] = rowsMap[2] || []).push({ name: "No team", lead: null, parent: "", members: loose.sort((a, b) => a.name.localeCompare(b.name)).map(asCard) });
+  return Object.keys(rowsMap).map(Number).sort((a, b) => a - b).map(k => rowsMap[k].sort((a, b) => a.name === "No team" ? 1 : b.name === "No team" ? -1 : a.name.localeCompare(b.name)));
+}
+let M = modelFromFile();
+
+const card = (p, cls) => `<div class="p ${cls || ""} ${p[3] || ""}" data-q="${esc((p[0] + " " + (p[1] || ROLE0) + " " + (p[2] || "")).toLowerCase())}">
+  <b>${esc(p[0])}</b><span>${esc(p[1] || ROLE0)}</span>${p[2] ? `<em>${esc(p[2])}</em>` : ""}</div>`;
 const grid = (list, cls) => `<div class="grid">${list.map(p => card(p, cls)).join("")}</div>`;
 const sec = (title, sub, body) => `<section class="sec"><h2>${esc(title)}</h2>${sub ? `<p class="sub">${esc(sub)}</p>` : ""}${body}</section>`;
 
 function build() {
-  let h = sec("Leadership", "", grid(D.leadership, "exec"));
-  h += sec("Sales Operations", "", `<div class="grid">${D.salesOps.map((x, i) => card(x, i == 0 ? "lead-card" : "")).join("")}</div>`);
-  h += sec("SOS-BDM", "", grid(D.sosBdm));
-  h += sec("Partnerships", "", grid(D.partners));
-  h += sec("Top Gun", "Top Gun AMs and their SDR",
-    `<div class="grid">${D.topGun.map(t => card(t.am, "lead-card") + card(t.sdr)).join("")}</div>`);
-  D.teams.forEach(t => {
-    const sub = t.leader ? "" : "Team leader to be announced";
-    let body = t.leader ? `<div class="grid">${card(t.leader, "lead-card")}</div>` : "";
-    if (t.columns) body += t.columns.map(c => `<div class="col"><h3>${esc(c.name)}</h3>${grid(c.members, /^Specialized/.test(c.name) ? "yl" : "")}</div>`).join("");
-    else body += `<div class="col">${grid(t.members)}</div>`;
-    h += sec(t.name, sub, body);
-  });
-  return h;
+  return M.map((row, ri) => row.map(t => sec(t.name, t.parent ? "Part of " + t.parent : "",
+    (t.lead ? `<div class="grid">${card(t.lead, "lead-card")}</div>` : "") + `<div class="col">${grid(t.members, ri === 0 ? "exec" : "")}</div>`)).join("")).join("");
 }
 
-
-const nd = (x, c) => x ? `<div class="n ${c || x[3] || ""}"><b>${esc(x[0])}</b><span>${esc(x[1] || "Acquisition Manager")}${x[2] ? " · " + esc(x[2]) : ""}</span></div>` : "";
+const nd = (x, c) => x ? `<div class="n ${c || ""} ${x[3] || ""}"><b>${esc(x[0])}</b><span>${esc(x[1] || ROLE0)}${x[2] ? " · " + esc(x[2]) : ""}</span></div>` : "";
 function chart() {
-  const top = `<div class="oc-grp"><div class="lab">Leadership</div><div class="oc-row">${D.leadership.map((x, i) => nd(x, i < 2 ? "ex" : "ho")).join("")}</div></div>
-  <div class="oc-top">
-    <div class="oc-grp"><div class="lab">Sales Operations</div><div class="oc-row">${D.salesOps.map((x, i) => nd(x, i == 0 ? "tl" : "")).join("")}</div></div>
-    <div class="oc-grp"><div class="lab">SOS-BDM</div><div class="oc-row">${D.sosBdm.map(x => nd(x)).join("")}</div></div>
-    <div class="oc-grp"><div class="lab">Partnerships</div><div class="oc-row">${D.partners.map(x => nd(x)).join("")}</div></div>
-  </div>`;
-  const cols = [`<div class="oc-col"><div class="nm">Top Gun</div>${D.topGun.map(t => nd(t.am) + nd(t.sdr, "sdr")).join("")}</div>`];
-  D.teams.forEach(t => {
-    if (t.columns) cols.push(`<div class="oc-col wide">${nd(t.leader, "tl")}<div class="oc-sub">${
-      t.columns.map(c => `<div class="oc-col"><div class="nm">${esc(c.name)}</div>${c.members.map(m => nd(m, /^Specialized/.test(c.name) ? "yl" : "")).join("")}</div>`).join("")}</div></div>`);
-    else cols.push(`<div class="oc-col"><div class="nm">${esc(t.name)}</div>${t.leader ? nd(t.leader, "tl") : nd(["TBA", "Team Leader"], "tl")}${t.members.map(m => nd(m)).join("")}</div>`);
-  });
-  return `<div class="oc">${top}<div class="oc-cols">${cols.join("")}</div></div>`;
+  const grp = (t, ri) => `<div class="oc-grp"><div class="lab">${esc(t.name)}</div><div class="oc-row">${t.lead ? nd(t.lead, "tl") : ""}${t.members.map(x => nd(x, ri === 0 ? "ex" : "")).join("")}</div></div>`;
+  const col = t => `<div class="oc-col"><div class="nm">${esc(t.name)}</div>${t.lead ? nd(t.lead, "tl") : ""}${t.members.map(m => nd(m)).join("")}</div>`;
+  const rowHtml = (row, ri) => {
+    if (ri < 2 && row.length <= 6) return `<div class="oc-top">${row.map(t => grp(t, ri)).join("")}</div>`;   // the first two rows: small groups side by side
+    const parents = [...new Set(row.map(t => t.parent).filter(Boolean))];
+    const solo = row.filter(t => !t.parent).map(col);
+    const grouped = parents.map(pn => `<div class="oc-col wide"><div class="nm">${esc(pn)}</div><div class="oc-sub">${row.filter(t => t.parent === pn).map(col).join("")}</div></div>`);
+    return `<div class="oc-cols">${[...grouped, ...solo].join("")}</div>`;
+  };
+  return `<div class="oc">${M.map(rowHtml).join("")}</div>`;
 }
 function view(v) {
   document.getElementById("dir").style.display = v == "list" ? "" : "none";
@@ -186,12 +201,13 @@ function filter(q) {
 const tile = t => `<div class="jt" data-q="${esc((t.term + " " + (t.abbr || "") + " " + t.def).toLowerCase())}">
   ${t.abbr ? `<div class="ab">${esc(t.abbr)}</div><b>${esc(t.term)}</b>` : `<div class="ab nm">${esc(t.term)}</div>`}<p>${esc(t.def)}</p>${t.size ? `<span class="sz">${esc(t.size)}</span>` : ""}</div>`;
 function headcount() {
-  const members = D.teams.reduce((n, t) => n + (t.columns ? t.columns.reduce((a, c) => a + c.members.length, 0) : t.members.length), 0);
-  const leaders = new Set(D.teams.filter(t => t.leader).map(t => t.leader[0])).size, topGun = D.topGun.length;
-  return `<div class="hc"><div class="main"><strong>${members + leaders + topGun}</strong><span>AM headcount (selling people)</span></div>
-    <div><strong>${members}</strong><span>Acquisition Managers</span></div>
+  const sell = M.slice(2).flat();                                   // row 3 onwards: the selling teams
+  const leaders = new Set(sell.filter(t => t.lead).map(t => t.lead[0])).size;
+  const members = sell.reduce((n, t) => n + t.members.length, 0);
+  return `<div class="hc"><div class="main"><strong>${members + leaders}</strong><span>AM headcount (selling people)</span></div>
+    <div><strong>${members}</strong><span>Team members</span></div>
     <div><strong>${leaders}</strong><span>Team leaders</span></div>
-    <div><strong>${topGun}</strong><span>Top Gun AMs</span></div></div>`;
+    <div><strong>${sell.length}</strong><span>Teams</span></div></div>`;
 }
 const jargon = () => D2.map(g => `<div class="jg"><h2>${esc(g.group)}</h2>${
   g.rows ? g.rows.map(r => `<div class="jrow" style="--n:${r.length}">${r.map(tile).join("")}</div>`).join("")
@@ -246,7 +262,7 @@ if (LMS.requireSignIn()) {
   document.getElementById("app").innerHTML = `<h1>Our Department</h1>
     <div class="ptabs"><button data-p="team" aria-selected="true">Team directory</button><button data-p="jargon" aria-selected="false">Internal jargon</button><button data-p="work" aria-selected="false">Work schedule and seat plan</button></div>
     <div class="panel" id="pn-team">
-      ${headcount()}
+      <div id="hcWrap">${headcount()}</div>
       <p class="lead">Who's who in Acquisition. Browse the org chart, or switch to List to search a name, team (like EXBT 3) or role.</p>
       <div class="bar"><input id="q" type="search" placeholder="Search name, team or role" autocomplete="off"><span class="count" id="count"></span><div class="tabs"><button data-v="chart" aria-pressed="true">Org chart</button><button data-v="list" aria-pressed="false">List</button></div></div>
       <div id="dir">${build()}</div><div class="chart" id="chart"><div class="ctl"><button id="fs">Full screen</button><button id="zo" title="Zoom out">−</button><button id="zi" title="Zoom in">+</button><span style="align-self:center;font-size:12px;opacity:.85">White = new joiner</span></div>${chart()}</div>
@@ -277,6 +293,13 @@ if (LMS.requireSignIn()) {
   document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => view(b.dataset.v));
   view("chart");
   document.getElementById("q").addEventListener("input", e => filter(e.target.value));
+  // Swap in the live directory from the Sheet (cached in this browser so the next visit is instant)
+  const KEY = "amacademy.directory", draw = dir => { try { M = modelFromSheet(dir); } catch (e) { return; }
+    document.getElementById("dir").innerHTML = build(); document.getElementById("hcWrap").innerHTML = headcount();
+    const ch = document.getElementById("chart"), ctl = ch.querySelector(".ctl"); ch.querySelector(".oc").outerHTML = chart(); ch.prepend(ctl);
+    filter(document.getElementById("q").value); };
+  try { const c = JSON.parse(localStorage.getItem(KEY) || "null"); if (c && c.people && c.people.length) draw(c); } catch (e) {}
+  LMS.directory().then(r => { if (r && r.ok && r.people && r.people.length) { try { localStorage.setItem(KEY, JSON.stringify({ people: r.people, teams: r.teams, latest: r.latest })); } catch (e) {} draw(r); } });
 }
 </script>
 </body>

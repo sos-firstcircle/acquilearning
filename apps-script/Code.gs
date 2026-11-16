@@ -504,13 +504,15 @@ function batches_() {
   const cache = CacheService.getScriptCache(), hit = cache.get("batches_v1");
   if (hit) return JSON.parse(hit);
   const out = readRows_(BATCHES_SHEET).map(function (r) {
-    return { batch: batchText_(r.Batch), name: String(r.Name || ""), type: String(r.Type || ""), start: String(r.Start || "").slice(0, 10), latest: /^y/i.test(String(r.Latest || "")), retake: /^y/i.test(String(r.Retake || "")) };
+    return { batch: batchText_(r.Batch), name: String(r.Name || ""), type: String(r.Type || ""), start: dayText_(r.Start), latest: /^y/i.test(String(r.Latest || "")), retake: /^y/i.test(String(r.Retake || "")) };
   }).filter(function (b) { return b.batch; });
   try { cache.put("batches_v1", JSON.stringify(out), 30); } catch (e) {}
   return out;
 }
 function latestBatch_() { const b = batches_().filter(function (x) { return x.latest; })[0]; return b ? b.batch : ""; }
 
+/** A date cell as YYYY-MM-DD in Manila time (readRows_ gives dates as UTC ISO text, which would show Nov 9 midnight as Nov 8). */
+function dayText_(v) { const s = String(v || "").trim(); if (!s) return ""; if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; const d = new Date(s); return isNaN(d) ? s : Utilities.formatDate(d, "Asia/Manila", "yyyy-MM-dd"); }
 /** A batch number as text: Sheets may have turned 000001 into 1 or 110926 into a number. */
 function batchText_(v) { const s = String(v == null ? "" : v).replace(/^'/, "").trim(); return /^\d{1,6}$/.test(s) ? ("000000" + s).slice(-6) : s; }
 function splitAccess_(v) { return String(v || "").split(/\s*,\s*/).map(function (a) { return a.trim(); }).filter(Boolean); }
