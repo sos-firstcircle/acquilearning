@@ -102,7 +102,19 @@ if (alreadyIn) {
   $("demoForm").onsubmit = e => {
     e.preventDefault(); $("err").classList.remove("show");
     try { LMS.signInDemo($("demoEmail").value.trim()); done(); }
-    catch(err){ if (err && err.message === "need-code") { $("demo").hidden = true; $("codeBox").hidden = false; $("codeInput").value = ""; $("codeInput").focus(); } else fail(); }
+    catch(err){
+      if (err && err.message === "need-code") { $("demo").hidden = true; $("codeBox").hidden = false; $("codeInput").value = ""; $("codeInput").focus(); }
+      else if (err && err.message === "not-on-list") {      // not on the old lists: check the People tab (Settings)
+        const b = $("demoForm").querySelector("button[type=submit],button:not([type])"), label = b ? b.textContent : "";
+        if (b) { b.disabled = true; b.textContent = "Checking…"; }
+        LMS.signInWithPeople($("demoEmail").value.trim()).then(done).catch(e2 => {
+          if (b) { b.disabled = false; b.textContent = label; }
+          if (e2 && e2.message === "removed") showError("Your access has been removed. Please contact Salesops.");
+          else if (e2 && e2.message === "backend") showError("Couldn't check your email right now. Please try again in a moment.");
+          else fail();
+        });
+      }
+      else fail(); }
   };
   // Shared-login batches: second step, the personal access code (checked by the Sheet).
   $("codeBack").onclick = e => { e.preventDefault(); $("err").classList.remove("show"); $("codeBox").hidden = true; $("demo").hidden = false; $("demoEmail").focus(); };

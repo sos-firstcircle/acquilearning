@@ -9,13 +9,41 @@
 <script src="shared/lms.js"></script>
 <script src="shared/shell.js"></script>
 <style>
-  .lead{margin:8px 0 22px;color:var(--ink-2);font-size:15px;max-width:640px}
-  .card{border:1px solid var(--line);border-radius:14px;padding:20px;background:#fff;max-width:560px}
+  .lead{margin:8px 0 18px;color:var(--ink-2);font-size:15px;max-width:680px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:20px;flex-wrap:wrap}
+  .tabs button{border:0;background:none;padding:10px 14px;font:inherit;font-weight:600;font-size:14px;color:var(--ink-2);border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+  .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--teal)}
+  .card{border:1px solid var(--line);border-radius:14px;padding:20px;background:#fff;max-width:640px;margin-bottom:16px}
   .card h3{font-size:16px;margin-bottom:4px}
   .card p{margin:0 0 14px;font-size:14px;color:var(--ink-2)}
-  .row{display:flex;gap:10px;flex-wrap:wrap}
-  .row input{flex:1;min-width:200px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;font:inherit}
-  #msg{margin-top:12px;font-size:14px;min-height:20px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  input[type=text],input[type=date],input:not([type]),select,textarea{padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:14px;background:#fff;color:var(--ink)}
+  textarea{width:100%;min-height:90px;box-sizing:border-box}
+  .msg{font-size:14px;min-height:20px;margin-top:10px}
+  .msg.ok{color:var(--green)} .msg.err{color:var(--coral)}
+  .bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .bar input[type=text]{min-width:220px;flex:1;max-width:320px}
+  .count{font-size:13px;color:var(--ink-3)}
+  table.t{width:100%;border-collapse:collapse;font-size:14px;background:#fff}
+  table.t th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-3);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+  table.t td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  table.t tr.off td{color:var(--ink-3)}
+  table.t td.act{white-space:nowrap;text-align:right}
+  .tw{border:1px solid var(--line);border-radius:12px;overflow:auto}
+  .chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:999px;background:var(--mist);margin:1px 2px 1px 0;white-space:nowrap}
+  .chip.admin{background:var(--coral-soft)} .chip.general{background:var(--teal-soft)} .chip.lead{background:var(--marigold-soft)}
+  .checks{display:flex;gap:10px 16px;flex-wrap:wrap;font-size:14px}
+  .checks label{display:flex;gap:6px;align-items:center}
+  .linkbtn{border:0;background:none;color:var(--teal-dark);font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:2px 4px}
+  .linkbtn.red{color:var(--coral)}
+  .orgrow{border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px;background:#fff}
+  .orgrow h3{font-size:15px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+  .orgrow .t{margin-top:10px}
+  .addp{border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;background:var(--mist)}
+  .addp label.f{display:block;font-size:13px;font-weight:600;margin:10px 0 4px}
+  .badge{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--marigold-soft);color:#6B4E00}
+  .loading{color:var(--ink-3);font-size:14px;padding:20px 0}
+  .warn{background:var(--marigold-soft);border-radius:10px;padding:10px 14px;font-size:14px;margin-bottom:14px}
 </style>
 </head>
 <body>
@@ -29,22 +57,307 @@ if (LMS.requireSignIn()) {
   renderSide("settings");
   const app = document.getElementById("app");
   if (!LMS.isAdmin()) app.innerHTML = `<h1>Settings</h1><p class="lead">This page is for trainers only.</p>`;
-  else {
+  else start();
+}
+
+function start(){
+  const app = document.getElementById("app");
+  const TABS = [["general","General"],["people","People"],["teams","Teams"],["batches","Batches"]];
+  let tab = (location.hash || "#general").slice(1); if (!TABS.some(t => t[0] === tab)) tab = "general";
+  let D = null, loadErr = "";                       // { people, teams, batches, peopleLogin } from the Sheet
+  const S = { q:"", team:"", batch:"", removed:false, adding:false, edit:"", teamsDirty:false, batchesDirty:false, openBatch:"" };
+  let T = [], B = [];                               // working copies of Teams and Batches (saved with the Save button)
+
+  const ACCESS_FIXED = ["Department", "General", "Admin", "Team Lead"];
+  const accChip = a => { const k = a.toLowerCase(); return `<span class="chip ${k === "admin" ? "admin" : k === "general" ? "general" : k === "team lead" ? "lead" : ""}">${esc(a)}</span>`; };
+  const teamNames = () => [...new Set(T.map(t => t.team).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const activePeople = () => D.people.filter(p => p.active);
+  const membersOf = team => activePeople().filter(p => p.team === team);
+  const inBatch = (p, id) => p.batch === id || (p.access || []).includes(id);
+  const msg = (id, text, ok) => { const m = document.getElementById(id); if (m) { m.textContent = text; m.className = "msg " + (ok ? "ok" : "err"); } };
+  const errText = r => !r ? "Couldn't reach the Sheet. Try again in a moment." : r.error === "unknown-action" ? "The Apps Script hasn't been updated yet (deploy the new Code.gs)." : r.error === "not-admin" ? "Only admins can do this." : r.error === "cannot-remove-self" ? "You can't remove yourself." : "Couldn't save (" + r.error + ").";
+
+  function load(){
+    return LMS.adminPeople().then(r => {
+      if (r && r.ok) { D = r; loadErr = ""; T = r.teams.map(t => ({ ...t })); B = r.batches.map(b => ({ ...b })); S.teamsDirty = S.batchesDirty = false; }
+      else loadErr = errText(r);
+      render();
+    });
+  }
+
+  function render(){
     app.innerHTML = `<h1>Settings</h1><p class="lead">Changes apply to everyone the next time they open the page.</p>
-      <div class="card"><h3>Trainer name</h3><p>The name that narrates the Acqui Service tour and lectures (the "Your trainer" card).</p>
-        <div class="row"><input id="trainer" maxlength="40" placeholder="Reyster"><button class="btn primary" id="save">Save</button></div>
-        <div id="msg" class="muted"></div></div>`;
-    const inp = document.getElementById("trainer"), msg = document.getElementById("msg");
+      <div class="tabs" role="tablist">${TABS.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${k === tab}">${l}</button>`).join("")}</div>
+      <div id="pane"></div>`;
+    const pane = document.getElementById("pane");
+    if (tab === "general") return renderGeneral(pane);
+    if (!D) { pane.innerHTML = loadErr ? `<p class="msg err">${esc(loadErr)}</p><button class="btn sm" data-reload>Try again</button>` : `<p class="loading">Loading from the Sheet…</p>`; return; }
+    if (tab === "people") renderPeople(pane);
+    if (tab === "teams") renderTeams(pane);
+    if (tab === "batches") renderBatches(pane);
+  }
+
+  /* ---------- General ---------- */
+  function renderGeneral(pane){
+    pane.innerHTML = `<div class="card"><h3>Trainer name</h3><p>The name that narrates the Acqui Service tour and lectures (the "Your trainer" card).</p>
+        <div class="row"><input id="trainer" maxlength="40" placeholder="Reyster" style="flex:1;min-width:200px"><button class="btn primary" id="saveTrainer">Save</button></div>
+        <div id="msgTrainer" class="msg"></div></div>
+      <div class="card"><h3>Sign-in from the People tab</h3>
+        <p>When on, anyone Active on the People tab can sign in with their email, and people you remove are signed out. When off, only the old lists in the code can sign in. Batch 110926 and the shared login work either way.</p>
+        <div class="row"><b id="plState">${D ? (D.peopleLogin ? "On" : "Off") : "…"}</b><button class="btn sm" id="plToggle" ${D ? "" : "disabled"}>${D && D.peopleLogin ? "Turn off" : "Turn on"}</button></div>
+        <div id="msgPL" class="msg"></div></div>`;
+    const inp = document.getElementById("trainer");
     inp.value = LMS.setting("trainer", "Reyster");
     LMS.settingsDone.then(s => { if (s && document.activeElement !== inp) inp.value = LMS.setting("trainer", "Reyster"); });
-    document.getElementById("save").onclick = async () => {
-      const v = inp.value.trim() || "Reyster";
-      msg.textContent = "Saving...";
+    document.getElementById("saveTrainer").onclick = async () => {
+      const v = inp.value.trim() || "Reyster"; msg("msgTrainer", "Saving…", true);
       const r = await LMS.setSetting("trainer", v);
-      msg.textContent = r && r.ok ? `Saved. The trainer is now ${v}.` : (r && r.error === "unknown-action" ? "The Apps Script hasn't been updated yet (deploy the new Code.gs)." : "Couldn't save. Try again in a moment.");
-      msg.style.color = r && r.ok ? "var(--green, #1a7f5a)" : "#b3243a";
+      msg("msgTrainer", r && r.ok ? `Saved. The trainer is now ${v}.` : errText(r), r && r.ok);
+    };
+    document.getElementById("plToggle").onclick = async () => {
+      const on = !D.peopleLogin;
+      if (on && !confirm("Turn on sign-in from the People tab? Everyone Active there will be able to sign in.")) return;
+      msg("msgPL", "Saving…", true);
+      const r = await LMS.setSetting("peopleLogin", on ? "on" : "off");
+      if (r && r.ok) { D.peopleLogin = on; render(); msg("msgPL", on ? "On. It takes up to a minute to apply." : "Off. It takes up to a minute to apply.", true); }
+      else msg("msgPL", errText(r), false);
     };
   }
+
+  /* ---------- People ---------- */
+  function accessBoxes(sel, name){
+    const opts = [...ACCESS_FIXED, ...B.map(b => b.batch)];
+    return `<div class="checks">${opts.map(a => `<label><input type="checkbox" name="${name}" value="${esc(a)}" ${sel.includes(a) ? "checked" : ""}>${esc(a)}${B.some(b => b.batch === a) ? ` <span class="count">${esc((B.find(b => b.batch === a) || {}).name || "")}</span>` : ""}</label>`).join("")}</div>`;
+  }
+  const teamSelect = (cur, id) => `<select id="${id}"><option value="">No team</option>${teamNames().map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("")}${cur && !teamNames().includes(cur) ? `<option selected>${esc(cur)}</option>` : ""}</select>`;
+  const batchSelect = (cur, id) => `<select id="${id}"><option value="">No batch</option>${B.map(b => `<option value="${esc(b.batch)}" ${b.batch === cur ? "selected" : ""}>${esc(b.batch)}${b.name ? " · " + esc(b.name) : ""}</option>`).join("")}</select>`;
+
+  function renderPeople(pane){
+    const q = S.q.toLowerCase();
+    const list = D.people.filter(p => (S.removed ? !p.active : p.active))
+      .filter(p => !q || (p.name + " " + p.email + " " + p.role + " " + p.team).toLowerCase().includes(q))
+      .filter(p => !S.team || (S.team === "-" ? !p.team : p.team === S.team))
+      .filter(p => !S.batch || inBatch(p, S.batch))
+      .sort((a, b) => a.name.localeCompare(b.name));
+    const row = p => S.edit === p.email ? editRow(p) : `<tr class="${p.active ? "" : "off"}">
+        <td><b>${esc(p.name)}</b><br><span class="count">${esc(p.email)}</span></td><td>${esc(p.role)}</td><td>${esc(p.team) || '<span class="count">No team</span>'}</td>
+        <td>${(p.access || []).map(accChip).join("")}</td><td>${esc(p.batch)}</td>
+        <td class="act">${p.active ? `<button class="linkbtn" data-edit="${esc(p.email)}">Edit</button><button class="linkbtn red" data-remove="${esc(p.email)}">Remove</button>` : `<button class="linkbtn" data-readd="${esc(p.email)}">Re-add</button>`}</td></tr>`;
+    pane.innerHTML = `
+      ${!D.peopleLogin ? `<div class="warn">Sign-in from this list is <b>off</b>. You can still edit it; turn it on in General when ready.</div>` : ""}
+      ${S.adding ? addForm() : ""}
+      <div class="bar">
+        <input type="text" id="pq" placeholder="Search name, email, role, team" value="${esc(S.q)}">
+        <select id="pteam"><option value="">All teams</option><option value="-" ${S.team === "-" ? "selected" : ""}>No team</option>${teamNames().map(t => `<option ${t === S.team ? "selected" : ""}>${esc(t)}</option>`).join("")}</select>
+        <select id="pbatch"><option value="">All batches</option>${B.map(b => `<option value="${esc(b.batch)}" ${b.batch === S.batch ? "selected" : ""}>${esc(b.batch)}${b.name ? " · " + esc(b.name) : ""}</option>`).join("")}</select>
+        <label class="count" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="premoved" ${S.removed ? "checked" : ""}>Show removed</label>
+        <span style="flex:1"></span>${S.adding ? "" : `<button class="btn primary sm" id="addOpen">Add people</button>`}
+      </div>
+      <p class="count">${list.length} ${S.removed ? "removed" : "people"}</p>
+      <div class="tw"><table class="t"><thead><tr><th>Name</th><th>Role</th><th>Team</th><th>Access</th><th>Batch</th><th></th></tr></thead>
+      <tbody>${list.map(row).join("") || `<tr><td colspan="6" class="count">Nobody here.</td></tr>`}</tbody></table></div>
+      <div id="msgPeople" class="msg"></div>`;
+    const pq = document.getElementById("pq"); pq.oninput = () => { S.q = pq.value; const pos = pq.selectionStart; renderPeople(pane); const n = document.getElementById("pq"); n.focus(); n.setSelectionRange(pos, pos); };
+  }
+  function addForm(){
+    return `<div class="addp"><h3 style="margin:0">Add people</h3>
+      <label class="f">Emails (one per line, or separated by commas)</label><textarea id="aEmails" placeholder="first.last@firstcircle.com"></textarea>
+      <div class="row" style="align-items:flex-end">
+        <div><label class="f">Role</label><input id="aRole" value="Acquisition Manager"></div>
+        <div><label class="f">Team</label>${teamSelect("", "aTeam")}</div>
+        <div><label class="f">Batch</label>${batchSelect("", "aBatch")}</div>
+      </div>
+      <label class="f">Access</label>${accessBoxes(["Department"], "aAcc")}
+      <p class="count" style="margin:8px 0 0">Names are taken from the email (first.last → First Last); fix them with Edit afterwards. Someone removed before is simply switched back on. Picking a batch also adds it to their access.</p>
+      <div class="row" style="margin-top:12px"><button class="btn primary sm" id="addSave">Add</button><button class="btn sm" id="addCancel">Cancel</button></div>
+      <div id="msgAdd" class="msg"></div></div>`;
+  }
+  function editRow(p){
+    return `<tr><td colspan="6" style="background:var(--mist)">
+      <div class="row" style="align-items:flex-end">
+        <div><label class="count">Name</label><br><input id="eName" value="${esc(p.name)}"></div>
+        <div><label class="count">Role</label><br><input id="eRole" value="${esc(p.role)}"></div>
+        <div><label class="count">Team</label><br>${teamSelect(p.team, "eTeam")}</div>
+        <div><label class="count">Batch</label><br>${batchSelect(p.batch, "eBatch")}</div>
+      </div>
+      <div style="margin-top:10px"><label class="count">Access</label>${accessBoxes(p.access || [], "eAcc")}</div>
+      <div class="row" style="margin-top:10px"><button class="btn primary sm" data-esave="${esc(p.email)}">Save</button><button class="btn sm" data-ecancel>Cancel</button><span class="count">${esc(p.email)}</span></div>
+      <div id="msgEdit" class="msg"></div></td></tr>`;
+  }
+  const checked = name => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
+  const withBatch = (acc, batch) => batch && !acc.includes(batch) ? [...acc, batch] : acc;
+
+  /* ---------- Teams ---------- */
+  function renderTeams(pane){
+    const rows = [...new Set(T.map(t => t.row))].sort((a, b) => a - b);
+    const leadOpts = cur => { const names = [...new Set(activePeople().map(p => p.name))].sort((a, b) => a.localeCompare(b)); return `<option value="">No lead</option>${names.map(n => `<option ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}${cur && !names.includes(cur) ? `<option selected>${esc(cur)}</option>` : ""}`; };
+    const parentOpts = (cur, self) => `<option value="">No parent</option>${teamNames().filter(t => t !== self).map(t => `<option ${t === cur ? "selected" : ""}>${esc(t)}</option>`).join("")}`;
+    const rowBlock = (r, i) => {
+      const ts = T.map((t, k) => ({ ...t, k })).filter(t => t.row === r && t.team).sort((a, b) => a.team.localeCompare(b.team));
+      return `<div class="orgrow"><h3>Row ${i + 1}<span class="row" style="gap:4px"><button class="linkbtn" data-rowabove="${r}">Add row above</button><button class="linkbtn" data-rowbelow="${r}">Add row below</button></span></h3>
+        <div class="tw" style="margin-top:10px"><table class="t"><thead><tr><th>Team</th><th>Lead</th><th>Parent team</th><th>People</th><th>Move to</th><th></th></tr></thead><tbody>
+        ${ts.map(t => `<tr><td><b>${esc(t.team)}</b></td>
+          <td><select data-lead="${t.k}">${leadOpts(t.lead)}</select></td>
+          <td><select data-parent="${t.k}">${parentOpts(t.parent, t.team)}</select></td>
+          <td>${membersOf(t.team).length}</td>
+          <td><select data-move="${t.k}">${rows.map((x, j) => `<option value="${x}" ${x === r ? "selected" : ""}>Row ${j + 1}</option>`).join("")}</select></td>
+          <td class="act"><button class="linkbtn" data-rename="${t.k}">Rename</button><button class="linkbtn red" data-tdel="${t.k}">Delete</button></td></tr>`).join("") || `<tr><td colspan="6" class="count">No teams yet. Add one below, or this row disappears when you save.</td></tr>`}
+        </tbody></table></div>
+        <div class="row" style="margin-top:10px"><input placeholder="New team name" data-newteam="${r}" style="min-width:200px"><button class="btn sm" data-addteam="${r}">Add team</button></div></div>`;
+    };
+    const unknown = [...new Set(activePeople().map(p => p.team).filter(t => t && !teamNames().includes(t)))];
+    pane.innerHTML = `<p class="lead" style="margin-top:0">Teams show on the org chart row by row, A to Z. Anyone set as a team's Lead gets Team Lead access automatically.</p>
+      ${unknown.length ? `<div class="warn">People are in teams that aren't listed here: ${unknown.map(esc).join(", ")}. Add them as teams, or change those people's team.</div>` : ""}
+      ${rows.map(rowBlock).join("") || `<p class="count">No rows yet.</p><button class="btn sm" data-rowbelow="0">Add a row</button>`}
+      <div class="row" style="position:sticky;bottom:0;background:#fff;padding:12px 0;border-top:1px solid var(--line)"><button class="btn primary" id="teamsSave" ${S.teamsDirty ? "" : "disabled"}>Save teams</button>${S.teamsDirty ? `<button class="btn" id="teamsUndo">Discard changes</button><span class="badge">Not saved yet</span>` : `<span class="count">All changes saved.</span>`}</div>
+      <div id="msgTeams" class="msg"></div>`;
+  }
+  function shiftRows(from, by){ T.forEach(t => { if (t.row >= from) t.row += by; }); }
+
+  /* ---------- Batches ---------- */
+  function renderBatches(pane){
+    const list = [...B].sort((a, b) => (b.start || "").localeCompare(a.start || "") || a.batch.localeCompare(b.batch));
+    pane.innerHTML = `<p class="lead" style="margin-top:0">The latest batch shows white on the org chart. New onboarding batches get the standard 10-day path.</p>
+      <div class="tw"><table class="t"><thead><tr><th>Batch</th><th>Name</th><th>Type</th><th>Start</th><th>Retakes</th><th>People</th><th>Latest</th></tr></thead><tbody>
+      ${list.map(b => { const k = B.indexOf(b), ppl = activePeople().filter(p => inBatch(p, b.batch)); return `<tr>
+        <td><b>${esc(b.batch)}</b></td>
+        <td><input value="${esc(b.name)}" data-bname="${k}" style="min-width:160px"></td>
+        <td><select data-btype="${k}">${["Onboarding","Training","Test","Shared login"].map(x => `<option ${x === b.type ? "selected" : ""}>${x}</option>`).join("")}${b.type && !["Onboarding","Training","Test","Shared login"].includes(b.type) ? `<option selected>${esc(b.type)}</option>` : ""}</select></td>
+        <td><input type="date" value="${esc(b.start)}" data-bstart="${k}"></td>
+        <td><input type="checkbox" data-bretake="${k}" ${b.retake ? "checked" : ""}></td>
+        <td><button class="linkbtn" data-bopen="${esc(b.batch)}">${ppl.length} ${S.openBatch === b.batch ? "▲" : "▼"}</button></td>
+        <td>${b.latest ? `<span class="chip general">Latest</span>` : `<button class="linkbtn" data-blatest="${k}">Set as latest</button>`}</td></tr>
+        ${S.openBatch === b.batch ? `<tr><td colspan="7" style="background:var(--mist)">${ppl.length ? ppl.sort((x, y) => x.name.localeCompare(y.name)).map(p => `<span class="chip">${esc(p.name)}${p.team ? " · " + esc(p.team) : ""}</span>`).join(" ") : `<span class="count">Nobody in this batch on the People tab yet.</span>`}</td></tr>` : ""}`; }).join("")}
+      </tbody></table></div>
+      <div class="addp" style="margin-top:16px"><h3 style="margin:0">New batch</h3>
+        <div class="row" style="align-items:flex-end">
+          <div><label class="f">Batch ID</label><input id="nbId" placeholder="112326" style="width:110px"></div>
+          <div><label class="f">Name</label><input id="nbName" placeholder="Nov 23 Onboarding"></div>
+          <div><label class="f">Type</label><select id="nbType"><option>Onboarding</option><option>Training</option><option>Test</option></select></div>
+          <div><label class="f">Start</label><input type="date" id="nbStart"></div>
+          <label class="count" style="display:flex;gap:6px;align-items:center;padding-bottom:10px"><input type="checkbox" id="nbRetake">Retakes</label>
+          <button class="btn sm" id="nbAdd" style="margin-bottom:2px">Add batch</button>
+        </div>
+        <p class="count" style="margin:8px 0 0">For onboarding batches, the ID is the start date as MMDDYY (Nov 23, 2026 = 112326). Typing a start date fills it in.</p></div>
+      <div class="row" style="position:sticky;bottom:0;background:#fff;padding:12px 0;border-top:1px solid var(--line)"><button class="btn primary" id="batchesSave" ${S.batchesDirty ? "" : "disabled"}>Save batches</button>${S.batchesDirty ? `<button class="btn" id="batchesUndo">Discard changes</button><span class="badge">Not saved yet</span>` : `<span class="count">All changes saved.</span>`}</div>
+      <div id="msgBatches" class="msg"></div>`;
+    const st = document.getElementById("nbStart"), id = document.getElementById("nbId");
+    st.onchange = () => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(st.value); if (m && !id.value) id.value = m[2] + m[3] + m[1].slice(2); };
+  }
+
+  /* ---------- Events ---------- */
+  app.addEventListener("click", async e => {
+    const t = e.target.closest("button"); if (!t) return;
+    if (t.dataset.tab) { tab = t.dataset.tab; history.replaceState(null, "", "#" + tab); render(); return; }
+    if (t.hasAttribute("data-reload")) { loadErr = ""; render(); load(); return; }
+    const pane = document.getElementById("pane");
+    // People
+    if (t.id === "addOpen") { S.adding = true; renderPeople(pane); document.getElementById("aEmails").focus(); return; }
+    if (t.id === "addCancel") { S.adding = false; renderPeople(pane); return; }
+    if (t.id === "addSave") {
+      const emails = [...new Set(document.getElementById("aEmails").value.split(/[\s,;]+/).map(x => x.trim().toLowerCase()).filter(Boolean))];
+      const bad = emails.filter(x => !/^[^@\s]+@firstcircle\.com$/.test(x));
+      if (!emails.length) return msg("msgAdd", "Paste at least one email.", false);
+      if (bad.length) return msg("msgAdd", "Not First Circle emails: " + bad.join(", "), false);
+      const batch = document.getElementById("aBatch").value, acc = withBatch(checked("aAcc"), batch);
+      t.disabled = true; msg("msgAdd", "Adding…", true);
+      const r = await LMS.peopleAdd(emails.map(email => ({ email, role: document.getElementById("aRole").value.trim(), team: document.getElementById("aTeam").value, batch, access: acc.join(", ") })));
+      t.disabled = false;
+      if (!r || !r.ok) return msg("msgAdd", errText(r), false);
+      const skipped = emails.length - r.added.length - r.readded.length;
+      S.adding = false; await load(); msg("msgPeople", `Added ${r.added.length}${r.readded.length ? `, switched ${r.readded.length} back on` : ""}${skipped ? `, ${skipped} already on the list` : ""}.`, true); return;
+    }
+    if (t.dataset.edit) { S.edit = t.dataset.edit; renderPeople(pane); return; }
+    if (t.hasAttribute("data-ecancel")) { S.edit = ""; renderPeople(pane); return; }
+    if (t.dataset.esave) {
+      const batch = document.getElementById("eBatch").value;
+      const fields = { name: document.getElementById("eName").value.trim(), role: document.getElementById("eRole").value.trim(), team: document.getElementById("eTeam").value, batch, access: withBatch(checked("eAcc"), batch).join(", ") };
+      if (!fields.name) return msg("msgEdit", "Name can't be empty.", false);
+      t.disabled = true; msg("msgEdit", "Saving…", true);
+      const r = await LMS.peopleUpdate(t.dataset.esave, fields);
+      if (!r || !r.ok) { t.disabled = false; return msg("msgEdit", errText(r), false); }
+      const p = D.people.find(x => x.email === t.dataset.esave); Object.assign(p, fields, { access: fields.access.split(", ").filter(Boolean) });
+      S.edit = ""; renderPeople(pane); msg("msgPeople", `Saved ${fields.name}.`, true); return;
+    }
+    if (t.dataset.remove) {
+      const p = D.people.find(x => x.email === t.dataset.remove);
+      if (!confirm(`Remove ${p.name}? They can't sign in anymore and leave the org chart. Their grades stay, and you can re-add them any time.`)) return;
+      t.disabled = true; const r = await LMS.peopleRemove(p.email);
+      if (!r || !r.ok) { t.disabled = false; return msg("msgPeople", errText(r), false); }
+      p.active = false; p.status = "Inactive"; renderPeople(pane); msg("msgPeople", `Removed ${p.name}.`, true); return;
+    }
+    if (t.dataset.readd) {
+      const p = D.people.find(x => x.email === t.dataset.readd);
+      t.disabled = true; const r = await LMS.peopleAdd([{ email: p.email }]);
+      if (!r || !r.ok) { t.disabled = false; return msg("msgPeople", errText(r), false); }
+      p.active = true; p.status = "Active"; renderPeople(pane); msg("msgPeople", `${p.name} is back on.`, true); return;
+    }
+    // Teams
+    if (t.dataset.rowabove !== undefined) { const r = +t.dataset.rowabove; shiftRows(r, 1); T.push({ team: "", row: r, lead: "", parent: "", empty: true }); S.teamsDirty = true; renderTeams(pane); return; }
+    if (t.dataset.rowbelow !== undefined) { const r = +t.dataset.rowbelow; shiftRows(r + 1, 1); T.push({ team: "", row: r + 1, lead: "", parent: "", empty: true }); S.teamsDirty = true; renderTeams(pane); return; }
+    if (t.dataset.addteam) {
+      const r = +t.dataset.addteam, inp = document.querySelector(`[data-newteam="${r}"]`), name = inp.value.trim();
+      if (!name) return; if (teamNames().includes(name)) return msg("msgTeams", `There's already a team called ${name}.`, false);
+      T = T.filter(x => !(x.empty && x.row === r)); T.push({ team: name, row: r, lead: "", parent: "" }); S.teamsDirty = true; renderTeams(pane); return;
+    }
+    if (t.dataset.tdel) {
+      const x = T[+t.dataset.tdel], n = membersOf(x.team).length;
+      if (n) return msg("msgTeams", `${x.team} still has ${n} people. Move them to another team first (People tab).`, false);
+      if (!confirm(`Delete the team ${x.team}?`)) return;
+      T.forEach(y => { if (y.parent === x.team) y.parent = ""; }); T.splice(+t.dataset.tdel, 1); S.teamsDirty = true; renderTeams(pane); return;
+    }
+    if (t.dataset.rename) {
+      if (S.teamsDirty) return msg("msgTeams", "Save or discard your other team changes first.", false);
+      const x = T[+t.dataset.rename], to = (prompt(`Rename ${x.team} to:`, x.team) || "").trim();
+      if (!to || to === x.team) return; if (teamNames().includes(to)) return msg("msgTeams", `There's already a team called ${to}.`, false);
+      msg("msgTeams", "Renaming…", true); const r = await LMS.teamRename(x.team, to);
+      if (!r || !r.ok) return msg("msgTeams", errText(r), false);
+      await load(); msg("msgTeams", `Renamed to ${to} (${r.moved} people moved).`, true); return;
+    }
+    if (t.id === "teamsUndo") { T = D.teams.map(x => ({ ...x })); S.teamsDirty = false; renderTeams(pane); return; }
+    if (t.id === "teamsSave") {
+      const rows = [...new Set(T.filter(x => x.team).map(x => x.row))].sort((a, b) => a - b);   // renumber rows 1, 2, 3… (empty rows drop out)
+      const out = T.filter(x => x.team).map(x => ({ team: x.team, row: rows.indexOf(x.row) + 1, lead: x.lead, parent: x.parent }))
+        .sort((a, b) => a.row - b.row || a.team.localeCompare(b.team));
+      t.disabled = true; msg("msgTeams", "Saving…", true);
+      const r = await LMS.teamsSave(out);
+      if (!r || !r.ok) { t.disabled = false; return msg("msgTeams", errText(r), false); }
+      D.teams = out; T = out.map(x => ({ ...x })); S.teamsDirty = false; renderTeams(pane); msg("msgTeams", "Teams saved.", true); return;
+    }
+    // Batches
+    if (t.dataset.bopen) { S.openBatch = S.openBatch === t.dataset.bopen ? "" : t.dataset.bopen; renderBatches(pane); return; }
+    if (t.dataset.blatest !== undefined) { B.forEach((b, i) => b.latest = i === +t.dataset.blatest); S.batchesDirty = true; renderBatches(pane); return; }
+    if (t.id === "nbAdd") {
+      const id = document.getElementById("nbId").value.trim();
+      if (!/^[A-Za-z0-9-]{2,20}$/.test(id)) return msg("msgBatches", "Batch ID: letters and numbers only (e.g. 112326).", false);
+      if (B.some(b => b.batch === id)) return msg("msgBatches", `Batch ${id} already exists.`, false);
+      B.push({ batch: id, name: document.getElementById("nbName").value.trim(), type: document.getElementById("nbType").value, start: document.getElementById("nbStart").value, latest: false, retake: document.getElementById("nbRetake").checked });
+      S.batchesDirty = true; renderBatches(pane); msg("msgBatches", `Batch ${id} added. Click Save batches to keep it.`, true); return;
+    }
+    if (t.id === "batchesUndo") { B = D.batches.map(x => ({ ...x })); S.batchesDirty = false; renderBatches(pane); return; }
+    if (t.id === "batchesSave") {
+      t.disabled = true; msg("msgBatches", "Saving…", true);
+      const r = await LMS.batchesSave(B);
+      if (!r || !r.ok) { t.disabled = false; return msg("msgBatches", errText(r), false); }
+      D.batches = B.map(x => ({ ...x })); S.batchesDirty = false; renderBatches(pane); msg("msgBatches", "Batches saved.", true); return;
+    }
+  });
+  app.addEventListener("change", e => {
+    const t = e.target, pane = document.getElementById("pane");
+    if (t.id === "pteam") { S.team = t.value; renderPeople(pane); }
+    if (t.id === "pbatch") { S.batch = t.value; renderPeople(pane); }
+    if (t.id === "premoved") { S.removed = t.checked; renderPeople(pane); }
+    if (t.dataset.lead !== undefined) { T[+t.dataset.lead].lead = t.value; S.teamsDirty = true; renderTeams(pane); }
+    if (t.dataset.parent !== undefined) { T[+t.dataset.parent].parent = t.value; S.teamsDirty = true; renderTeams(pane); }
+    if (t.dataset.move !== undefined) { T[+t.dataset.move].row = +t.value; S.teamsDirty = true; renderTeams(pane); }
+    if (t.dataset.btype !== undefined) { B[+t.dataset.btype].type = t.value; S.batchesDirty = true; renderBatches(pane); }
+    if (t.dataset.bstart !== undefined) { B[+t.dataset.bstart].start = t.value; S.batchesDirty = true; renderBatches(pane); }
+    if (t.dataset.bretake !== undefined) { B[+t.dataset.bretake].retake = t.checked; S.batchesDirty = true; renderBatches(pane); }
+    if (t.dataset.bname !== undefined) { B[+t.dataset.bname].name = t.value.trim(); S.batchesDirty = true; renderBatches(pane); }
+  });
+  window.addEventListener("beforeunload", e => { if (S.teamsDirty || S.batchesDirty) { e.preventDefault(); e.returnValue = ""; } });
+
+  render(); load();
 }
 </script>
 </body>

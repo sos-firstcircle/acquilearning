@@ -40,6 +40,13 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - `checkEmail_` / `codes_` in Code.gs do the check on every request. A coded person is recorded as `acquisitiongroup+<id>@firstcircle.com` (id = a scramble of the code) with their real name, so progress and grades are per person. `LMS.batchOf` and the Grades page understand that form. If the `Codes` tab is missing or empty, codes are off and the shared login works as before (honor code name on exams).
 - Client: `codeLogin` in lms.js config, `LMS.signInWithCode`, second step on `index.html`.
 
+## People, Teams, Batches (Sheet tabs, edited in Settings)
+- Sheet tabs `People` (Email, Name, Role, Team, Status, Access, Batch), `Teams` (Team, Row, Lead, Parent team), `Batches` (Batch, Name, Type, Start, Latest, Retake), `Audit` (every change from Settings). Read by column name; hand edits are fine.
+- Remove = Status "Inactive" (never deleted); re-add = "Active". Access is a comma list: Department, General, Admin, Team Lead, batch IDs. A team's Lead gets Team Lead automatically. Finishing Day 10 adds General (`grantGeneral`).
+- Sign-in from People is behind the Settings key `peopleLogin` = "on" (toggle in Settings > General). Off = only the old lists (roster.js / BATCHES) sign in. The old lists always still work (110926, test batches, acquisitiongroup + FC tokens).
+- Code.gs: `people_()`, `batches_()`, `setting_()` (cached 30s), `isAdmin_` (ADMIN_EMAILS or Access "Admin"), `canRetake_` (RETAKE_BATCHES or Batches Retake), actions whoami / directory / adminPeople / peopleAdd / peopleRemove / peopleUpdate / teamsSave / teamRename / batchesSave / grantGeneral. myProgress also returns `me`.
+- Client: `LMS.signInWithPeople` (index.html falls back to it on "not-on-list"), `LMS.hasAccess(name)`, People users carry `people:true, access, batch, admin, retake` in the saved user. "removed" from the backend signs them out.
+
 ## Grades page charts (admins)
 - `grades.html` has "Overall" (average best score per exam) and "Per question" charts. Per question uses the `Items` column of the Grades tab: a JSON record sent with each attempt (`items` in `LMS.saveResult`).
 - Product Knowledge 1-3: `Items` = `{"section.question": [points, answer]}`, keyed by position in the questions file (not the shuffled order). Add new questions at the END of a section, or old answers line up with the wrong question.

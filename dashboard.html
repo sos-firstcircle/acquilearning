@@ -161,7 +161,12 @@ const LOCK = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke
    A day with no content yet can't be completed, so it keeps the days after it locked. Otherwise a day unlocks when the one before it is complete. */
 let selected = (+new URLSearchParams(location.search).get('day')) || null;   // the day whose dropdown is open (lessons link back with ?day=N)
 /* opens: { "<batch>": "YYYY-MM-DD" } on a day keeps it locked for that batch until midnight Manila time on that date (on top of the normal "finish the day before" rule). */
-const viewBatch = e => (LMS.config.viewAs || {})[LMS.batchOf(e)] || LMS.batchOf(e);   // viewAs in lms.js: a test batch sees another batch's view
+// Admins: pick which batch's dashboard to look at (day names, opening dates, sessions). Batch 000002 has its own page (Dashboard (General)).
+const ymd = b => b.slice(4) + b.slice(0, 4);   // MMDDYY -> YYMMDD so batches sort by start date
+const ADMIN_BATCHES = LMS.isAdmin() ? Object.keys((window.LMS_ROSTER || {}).batches || {}).filter(b => b !== "000002").sort((a, b) => ymd(b).localeCompare(ymd(a))) : [];
+let adminBatch = (() => { let v = ""; try { v = localStorage.getItem("acqui.adminBatch") || ""; } catch (e) {} return ADMIN_BATCHES.includes(v) ? v : (ADMIN_BATCHES[0] || ""); })();
+const batchName = b => b === "000000" ? "Test batch (000000)" : b === "000001" ? "Hanna's test batch (000001)" : `Batch ${b} (${new Date(2000 + +b.slice(4), +b.slice(0, 2) - 1, +b.slice(2, 4)).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })})`;
+const viewBatch = e => { const b = adminBatch || LMS.batchOf(e); return (LMS.config.viewAs || {})[b] || b; };   // viewAs in lms.js: a test batch sees another batch's view
 const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[viewBatch(u && u.email)]; return s ? new Date(s + "T00:00:00+08:00") : null; };
 const opensText = d => { const t = opensAt(d); return t ? t.toLocaleDateString("en-PH", { weekday:"short", month:"short", day:"numeric", timeZone:"Asia/Manila" }) : ""; };
 function compute(){
@@ -172,6 +177,8 @@ function compute(){
     const t = d0.titles && d0.titles[viewBatch(u && u.email)], d = t ? { ...d0, title: t } : d0;   // titles: { batch: "..." } = per-batch day name
     const at = opensAt(d);
     if (at && Date.now() < at.getTime()) { prevComplete = false; return { ...d, empty: !d.tasks.length && !(d.materials||[]).length && !d.exams.length, tasksDone: 0, status: "locked", notYet: true }; }   // its date hasn't come yet
+    const hold = d.hold && d.hold[viewBatch(u && u.email)];   // hold: { "<batch>": "message" } = locked for that batch with this message until the line is removed (trainer toggles it)
+    if (hold) { prevComplete = false; return { ...d, empty: false, tasksDone: 0, status: "locked", held: hold }; }
     const catchUp = catchDays.includes(d.day), manual = catchUp && done("catchup-d" + d.day);   // marked done by hand
     const empty = !d.tasks.length && !(d.materials||[]).length && !d.exams.length;
     if (empty) {                       // no content yet: follows the lock chain but can't be completed (unless marked done by hand)
@@ -208,6 +215,7 @@ function catchBtn(sel){
 function dropdown(sel, P){
   const brief = sel.brief ? `<p class="brief"><small>What to expect</small>${esc(sel.brief)}</p>` : "";
   const adminOpen = sel.status === "locked" && LMS.isAdmin();   // admins can open every day; trainees see it locked
+  if (sel.held && !adminOpen) return `<div class="drop"><div class="lockmsg">${LOCK} ${esc(sel.held)}</div></div>`;
   if (sel.status === "locked" && !adminOpen) return `<div class="drop"><div class="lockmsg">${LOCK} ${sel.notYet ? `This day opens on ${esc(opensText(sel))}.` : `Complete day ${sel.day-1} to unlock this day.`}</div>${brief}</div>`;
   if (sel.empty) return `<div class="drop">${brief}<p class="empty" style="margin-top:${brief?8:0}px">Content coming soon.</p>${catchBtn(sel)}</div>`;
   const taskLi = t => {
@@ -291,7 +299,7 @@ function sessionsHtml(){
   if (C.embedSrc) h = `<iframe class="cal-frame" title="Training calendar" src="${esc(C.embedSrc)}${C.embedSrc.includes("?")?"&":"?"}mode=AGENDA&ctz=Asia%2FManila&showTitle=0&showPrint=0&showTabs=0&showCalendars=0"></iframe>`;
   else {
     const now = new Date();
-    const lockedIds = LMS.isAdmin() ? [] : compute().days.filter(d => d.status === "locked").flatMap(d => d.sessions || []);   // a session on a locked day stays hidden until that day opens (admins see all)
+    const lockedIds = LMS.isAdmin() ? [] : compute().days.filter(d => d.status === "locked" && !d.held).flatMap(d => d.sessions || []);   // a session on a locked day stays hidden until that day opens (admins see all)
     const up = mySessions().filter(s => !lockedIds.includes(s.id)).map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
     const g = x => x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
     h = up.length ? `<ul class="sess">${up.map(s => {
@@ -323,7 +331,7 @@ function gradedHtml(days, P){
 /* ---------- Existing AMs: one-screen view of lectures, simulations and practice exams (existing/sections.js) ---------- */
 const EX_KIND = { lecture:"Guided demo", practice:"Practice exam", exam:"Simulation exam" };
 /* Admins: "Dashboard (General)" in the sidebar (?view=general) shows what the existing AMs (batch 000002) see. */
-const GENERAL = LMS.isAdmin() && /[?&]view=general\b/.test(location.search);
+const GENERAL = (LMS.isAdmin() || LMS.hasAccess("general")) && /[?&]view=general\b/.test(location.search);   // admins, and People-tab users with General access
 function renderExisting(){
   const u = LMS.user(), P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   const all = window.LMS_EXISTING.flatMap(s => s.groups.flatMap(g => g.items)), nDone = all.filter(i => done(i.id)).length;
@@ -361,6 +369,7 @@ function render(){
   if (LMS.isExisting() || GENERAL) return renderExisting();
   const u = LMS.user(), { days, current, P } = compute();
   const completeCount = days.filter(d => d.status === "complete").length;
+  if (completeCount === days.length && !LMS.isAdmin()) LMS.grantGeneral();   // finished the path: General access (People tab users only; no-op otherwise)
 
   const hour = new Date().getHours(), greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const sub = completeCount === days.length ? "You've completed the 2-week path. Congratulations!"
@@ -382,6 +391,7 @@ function render(){
 
   document.getElementById("app").innerHTML = `
     <div class="hello"><div><h1>${greet}, ${esc(LMS.firstName(u.name))}</h1><p>${sub}</p></div>
+      ${ADMIN_BATCHES.length ? `<label class="small muted" style="display:flex;flex-direction:column;gap:4px">Viewing as<select id="adminBatch" style="font:inherit;font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--paper,#fff);color:var(--ink)">${ADMIN_BATCHES.map(b => `<option value="${b}" ${b===adminBatch?"selected":""}>${esc(batchName(b))}</option>`).join("")}</select></label>` : ""}
       <div class="overall">Progress<b>${completeCount} of ${days.length} days</b></div></div>
     <div class="segs" aria-hidden="true">${days.map(d=>`<i class="${look(d)}"></i>`).join("")}</div>
     <div class="lower"><div>${weeks}</div>
@@ -414,6 +424,7 @@ document.addEventListener("input", e => {      // note box: keep the draft (and 
   document.querySelectorAll("[data-rsvp-note]").forEach(x => { if (x.dataset.rsvpNote === id && x !== n) x.value = n.value; });
 });
 document.addEventListener("change", e => {
+  if (e.target.id === "adminBatch"){ adminBatch = e.target.value; try { localStorage.setItem("acqui.adminBatch", adminBatch); } catch (x) {} selected = null; render(); return; }   // admin batch picker
   const r = e.target.closest("[data-rsvp-informed]");
   if (r){ const id = r.dataset.rsvpInformed; (rsvpDraft[id] = rsvpDraft[id] || {}).informed = r.checked;
     document.querySelectorAll("[data-rsvp-informed]").forEach(x => { if (x.dataset.rsvpInformed === id) x.checked = r.checked; });

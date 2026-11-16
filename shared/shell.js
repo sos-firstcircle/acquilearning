@@ -34,9 +34,10 @@ function renderSide(active){
       <li class="nav-label">Trainers</li>
       ${link("grades.html","grades","Grades","grades")}${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : `
       ${link("dashboard.html","home","Dashboard","dashboard")}
+      ${LMS.hasAccess("general") && !LMS.isExisting() ? link("dashboard.html?view=general","home","Dashboard (General)","general") : ""}
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}
-      ${LMS.isExisting() ? link("library.html","book","Library","library") : ""}
+      ${LMS.isExisting() || LMS.hasAccess("general") ? link("library.html","book","Library","library") : ""}
       ${link("department.html","session","Department","department")}`}
     </ul>
     <div class="side-foot"><span class="av">${esc(LMS.initials(u.name))}</span><div><b>${esc(u.name)}</b>${LMS.batchOf(u.email) ? `<small style="display:block;color:#8FB0B6;font-size:11px;line-height:1.3">Batch ${esc(LMS.batchOf(u.email))}</small>` : ""}<button id="signOut">Sign out</button></div></div>`;

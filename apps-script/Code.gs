@@ -61,6 +61,14 @@ const CODES_SHEET = "Codes";
 const LOGINS_SHEET = "Logins";
 const LOGINS_HEADER = ["Timestamp", "Name", "Token", "Email"];
 
+// People, teams and batches live in the Sheet (edited from Settings on the site, or by hand). Columns are read by name.
+const PEOPLE_SHEET = "People", TEAMS_SHEET = "Teams", BATCHES_SHEET = "Batches", AUDIT_SHEET = "Audit";
+const PEOPLE_HEADER = ["Email", "Name", "Role", "Team", "Status", "Access", "Batch"];
+const TEAMS_HEADER = ["Team", "Row", "Lead", "Parent team"];
+const BATCHES_HEADER = ["Batch", "Name", "Type", "Start", "Latest", "Retake"];
+const AUDIT_HEADER = ["Timestamp", "By", "Action", "Target", "Before", "After"];
+// Sign-in from the People tab is switched on by the Settings key "peopleLogin" = "on" (Settings page). Until then only the lists above can sign in.
+
 const GRADES_SHEET = "Grades";      // one row per scored attempt
 const PROGRESS_SHEET = "Progress";  // one row per completed task/lesson
 const GRADES_HEADER = ["Timestamp", "Email", "Name", "Batch", "Exam ID", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Items"];   // Items = per-question answers (JSON) for the Grades page charts
@@ -105,7 +113,7 @@ function doPost(e) {
     }
 
     if (req.action === "saveResult") {
-      if (RETAKE_BATCHES.indexOf(user.batch) === -1 && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id; })) {
+      if (!canRetake_(user.batch) && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id; })) {
         return json_({ ok: false, error: "already-taken" });
       }
       const pct = p.max ? Math.round((p.score / p.max) * 1000) / 10 : "";
@@ -158,18 +166,18 @@ function doPost(e) {
         results[id] = { status: "done", score: best.score, max: best.max, passed: best.passed, attempts: h.length, history: h, updated: h[h.length - 1].at };
         done[id] = true;
       });
-      return json_({ ok: true, done: Object.keys(done).filter(function (id) { return !results[id]; }), results: results });
+      return json_({ ok: true, done: Object.keys(done).filter(function (id) { return !results[id]; }), results: results, me: me_(user) });
     }
     if (req.action === "myGrades") {
       return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(function (r) { return String(r.Email).toLowerCase() === user.email; }).map(function (r) { delete r.Items; return r; }) });
     }
     if (req.action === "adminData") {
-      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
       return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET) });
     }
     if (req.action === "setDetails") {     // admins: rewrite the Details (notes) cell of existing Grades rows for one batch. Nothing else in the row is touched.
-      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
       const allowed = BATCHES[String(p.batch || "")], rowsIn = Array.isArray(p.rows) ? p.rows.slice(0, 500) : [];
       if (!allowed) throw new Error("bad-batch");
@@ -208,7 +216,7 @@ function doPost(e) {
       return json_({ ok: true, rsvps: out });
     }
     if (req.action === "adminRsvps") {
-      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
       return json_({ ok: true, rsvps: readRows_(SESSIONS_SHEET) });
     }
     if (req.action === "getSettings") {       // any allowed person (the tour reads the trainer name)
@@ -217,9 +225,10 @@ function doPost(e) {
       return json_({ ok: true, settings: out });
     }
     if (req.action === "setSetting") {
-      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
       const key = String(p.key || "").slice(0, 60), val = String(p.value == null ? "" : p.value).slice(0, 200);
       if (!key) throw new Error("no-key");
+      try { CacheService.getScriptCache().remove("settings_v1"); } catch (e) {}
       const sh = sheet_(SETTINGS_SHEET, SETTINGS_HEADER), vals = sh.getDataRange().getValues();
       for (let i = 1; i < vals.length; i++) {
         if (vals[i][0] === key) { sh.getRange(i + 1, 2, 1, 3).setValues([[val, new Date(), user.email]]); return json_({ ok: true }); }
@@ -227,8 +236,99 @@ function doPost(e) {
       appendByHeader_(sh, { "Key": key, "Value": val, "Updated": new Date(), "By": user.email });
       return json_({ ok: true });
     }
+    if (req.action === "whoami") return json_({ ok: true, me: me_(user) });
+    if (req.action === "directory") {           // any signed-in person: the org chart (names, roles, teams only; no emails)
+      const ppl = people_();
+      return json_({ ok: true, people: Object.keys(ppl).map(function (e) { return ppl[e]; }).filter(function (r) { return r.active; }).map(function (r) { return { name: r.name, role: r.role, team: r.team, batch: r.batch }; }),
+        teams: readRows_(TEAMS_SHEET).map(teamOut_), latest: latestBatch_() });
+    }
+    if (req.action === "adminPeople") {         // Settings page: everything, including emails, access and removed people
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const ppl = people_();
+      return json_({ ok: true, people: Object.keys(ppl).map(function (e) { return ppl[e]; }), teams: readRows_(TEAMS_SHEET).map(teamOut_), batches: batches_(), peopleLogin: setting_("peopleLogin") === "on" });
+    }
+    if (req.action === "peopleAdd") {           // add new people, or switch removed ones back on
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const rows = Array.isArray(p.rows) ? p.rows.slice(0, 300) : [];
+      const sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), map = peopleRowMap_(sh), added = [], back = [];
+      rows.forEach(function (it) {
+        const em = String(it.email || "").trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+$/.test(em) || !em.endsWith("@" + ALLOWED_DOMAIN)) return;
+        const r = map.rows[em];
+        if (r) {
+          if (String(sh.getRange(r, map.col.Status + 1).getValue()).toLowerCase() !== "active") { sh.getRange(r, map.col.Status + 1).setValue("Active"); back.push(em); audit_(user.email, "re-add", em, "Inactive", "Active"); }
+          return;
+        }
+        const rec = { "Email": em, "Name": clean_(it.name) || nameFromEmail_(em), "Role": clean_(it.role) || "Acquisition Manager", "Team": clean_(it.team), "Status": "Active", "Access": clean_(it.access) || "Department", "Batch": it.batch ? "'" + clean_(it.batch) : "" };
+        appendByHeader_(sh, rec); map.rows[em] = sh.getLastRow(); added.push(em);
+        audit_(user.email, "add", em, "", JSON.stringify(rec));
+      });
+      clearPeopleCache_();
+      return json_({ ok: true, added: added, readded: back });
+    }
+    if (req.action === "peopleRemove") {        // never deletes: only sets Status to Inactive
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const em = String(p.email || "").trim().toLowerCase(), sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), map = peopleRowMap_(sh), r = map.rows[em];
+      if (!r) throw new Error("not-found");
+      if (em === user.email) throw new Error("cannot-remove-self");
+      sh.getRange(r, map.col.Status + 1).setValue("Inactive");
+      audit_(user.email, "remove", em, "Active", "Inactive"); clearPeopleCache_();
+      return json_({ ok: true });
+    }
+    if (req.action === "peopleUpdate") {        // change name, role, team, access or batch of one person
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const em = String(p.email || "").trim().toLowerCase(), sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), map = peopleRowMap_(sh), r = map.rows[em];
+      if (!r) throw new Error("not-found");
+      ["Name", "Role", "Team", "Access", "Batch"].forEach(function (k) {
+        const key = k.toLowerCase(); if (!p.fields || !(key in p.fields)) return;
+        if (map.col[k] === undefined) { ensureColumn_(sh, k); map.col[k] = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0].indexOf(k); }
+        const cell = sh.getRange(r, map.col[k] + 1), before = String(cell.getValue()), after = clean_(p.fields[key]);
+        if (before === after) return;
+        cell.setValue(k === "Batch" && after ? "'" + after : after);
+        audit_(user.email, "edit " + key, em, before, after);
+      });
+      clearPeopleCache_();
+      return json_({ ok: true });
+    }
+    if (req.action === "teamsSave") {           // the whole Teams table, as edited on the Settings page
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const list = (Array.isArray(p.teams) ? p.teams : []).slice(0, 200).map(function (t) { return [clean_(t.team), Number(t.row) || 1, clean_(t.lead), clean_(t.parent)]; }).filter(function (t) { return t[0]; });
+      const before = JSON.stringify(readRows_(TEAMS_SHEET).map(teamOut_));
+      writeTable_(TEAMS_SHEET, TEAMS_HEADER, list);
+      audit_(user.email, "teams", "Teams", before.slice(0, 40000), JSON.stringify(list).slice(0, 40000));
+      return json_({ ok: true });
+    }
+    if (req.action === "teamRename") {          // rename a team everywhere: its row in Teams, members' Team cells, other teams' Parent
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const from = clean_(p.from), to = clean_(p.to);
+      if (!from || !to || from === to) throw new Error("bad-name");
+      const sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), v = sh.getDataRange().getValues(), cT = v[0].indexOf("Team"); let n = 0;
+      for (let r = 1; r < v.length && cT > -1; r++) if (String(v[r][cT]).trim() === from) { sh.getRange(r + 1, cT + 1).setValue(to); n++; }
+      const ts = sheet_(TEAMS_SHEET, TEAMS_HEADER), tv = ts.getDataRange().getValues(), cN = tv[0].indexOf("Team"), cP = tv[0].indexOf("Parent team");
+      for (let r = 1; r < tv.length; r++) { if (String(tv[r][cN]).trim() === from) ts.getRange(r + 1, cN + 1).setValue(to); if (cP > -1 && String(tv[r][cP]).trim() === from) ts.getRange(r + 1, cP + 1).setValue(to); }
+      audit_(user.email, "rename team", from, from, to + " (" + n + " people moved)"); clearPeopleCache_();
+      return json_({ ok: true, moved: n });
+    }
+    if (req.action === "batchesSave") {         // the whole Batches table (create, rename, set latest)
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const list = (Array.isArray(p.batches) ? p.batches : []).slice(0, 200).map(function (b) { return ["'" + clean_(b.batch), clean_(b.name), clean_(b.type), clean_(b.start), b.latest ? "Yes" : "", b.retake ? "Yes" : "No"]; }).filter(function (b) { return b[0] !== "'"; });
+      const before = JSON.stringify(batches_());
+      writeTable_(BATCHES_SHEET, BATCHES_HEADER, list);
+      audit_(user.email, "batches", "Batches", before.slice(0, 40000), JSON.stringify(list).slice(0, 40000));
+      clearPeopleCache_();
+      return json_({ ok: true });
+    }
+    if (req.action === "grantGeneral") {        // the person finished Day 10: give them General access (People tab only)
+      const sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), map = peopleRowMap_(sh), r = map.rows[user.email];
+      if (!r || map.col.Access === undefined) return json_({ ok: true, changed: false });
+      const cell = sh.getRange(r, map.col.Access + 1), acc = splitAccess_(cell.getValue());
+      if (acc.some(function (a) { return a.toLowerCase() === "general"; })) return json_({ ok: true, changed: false });
+      acc.push("General"); cell.setValue(acc.join(", "));
+      audit_("system (Day 10 done)", "edit access", user.email, "", acc.join(", ")); clearPeopleCache_();
+      return json_({ ok: true, changed: true });
+    }
     if (req.action === "chat") {
-      if (ADMIN_EMAILS.indexOf(user.email) === -1) throw new Error("not-admin");
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
       return json_(chat_(user.email, String(p.question || "")));
     }
     return json_({ ok: false, error: "unknown-action" });
@@ -287,8 +387,17 @@ function checkEmail_(req) {
   const plain = email.replace(/\+[^@]*@/, "@");                        // a coded person arrives as shared+<id>@...
   const batchFor = function (e) { return Object.keys(BATCHES).filter(function (k) { return BATCHES[k].indexOf(e) !== -1; })[0] || ""; };
   if (plain !== email) { if (CODE_BATCHES.indexOf(batchFor(plain)) === -1) throw new Error("not-on-list"); email = plain; }
-  const batch = batchFor(email);
-  if (!email.endsWith("@" + ALLOWED_DOMAIN) || (!batch && ADMIN_EMAILS.indexOf(email) === -1)) throw new Error("not-on-list");
+  let batch = batchFor(email);
+  if (!email.endsWith("@" + ALLOWED_DOMAIN)) throw new Error("not-on-list");
+  if (setting_("peopleLogin") === "on" && batch !== "000002") {     // People tab (Settings): removed people are blocked, listed people may sign in
+    const pr = people_()[email];
+    if (pr && !pr.active) throw new Error("removed");
+    if (!batch && ADMIN_EMAILS.indexOf(email) === -1) {
+      if (!pr) throw new Error("not-on-list");
+      return { email: email, name: pr.name || req.name || email, batch: pr.batch, people: true };
+    }
+  }
+  if (!batch && ADMIN_EMAILS.indexOf(email) === -1) throw new Error("not-on-list");
   if (CODE_BATCHES.indexOf(batch) !== -1) {
     const codes = codes_();
     if (codes) {                                                        // codes are switched on (the Codes tab has rows)
@@ -367,4 +476,89 @@ function sheet_(name, header) {
 
 function json_(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/* ---------- People / Teams / Batches (Settings page) ---------- */
+
+/** Every row of the People tab, keyed by email: { email, name, role, team, status, active, access:[...], batch }. Cached 30s. */
+function people_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("people_v1");
+  if (hit) return JSON.parse(hit);
+  const ids = batches_().map(function (b) { return b.batch; }), out = {};
+  const leads = readRows_(TEAMS_SHEET).map(function (t) { return String(t.Lead || "").trim().toLowerCase(); }).filter(Boolean);   // a team's Lead gets Team Lead access automatically
+  readRows_(PEOPLE_SHEET).forEach(function (r) {
+    const em = String(r.Email || "").trim().toLowerCase(); if (!em) return;
+    const access = splitAccess_(r.Access), st = String(r.Status || "Active").trim();
+    if (leads.indexOf(String(r.Name || "").trim().toLowerCase()) !== -1 && !access.some(function (a) { return a.toLowerCase() === "team lead"; })) access.push("Team Lead");
+    let batch = batchText_(r.Batch);
+    if (!batch) batch = access.filter(function (a) { return ids.indexOf(a) !== -1; })[0] || "";
+    out[em] = { email: em, name: String(r.Name || "").trim(), role: String(r.Role || "").trim(), team: String(r.Team || "").trim(), status: st, active: st.toLowerCase() !== "inactive", access: access, batch: batch };
+  });
+  try { cache.put("people_v1", JSON.stringify(out), 30); } catch (e) {}
+  return out;
+}
+function clearPeopleCache_() { try { CacheService.getScriptCache().removeAll(["people_v1", "batches_v1"]); } catch (e) {} }
+
+/** Rows of the Batches tab: [{ batch, name, type, start, latest, retake }]. Cached 30s. */
+function batches_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("batches_v1");
+  if (hit) return JSON.parse(hit);
+  const out = readRows_(BATCHES_SHEET).map(function (r) {
+    return { batch: batchText_(r.Batch), name: String(r.Name || ""), type: String(r.Type || ""), start: String(r.Start || "").slice(0, 10), latest: /^y/i.test(String(r.Latest || "")), retake: /^y/i.test(String(r.Retake || "")) };
+  }).filter(function (b) { return b.batch; });
+  try { cache.put("batches_v1", JSON.stringify(out), 30); } catch (e) {}
+  return out;
+}
+function latestBatch_() { const b = batches_().filter(function (x) { return x.latest; })[0]; return b ? b.batch : ""; }
+
+/** A batch number as text: Sheets may have turned 000001 into 1 or 110926 into a number. */
+function batchText_(v) { const s = String(v == null ? "" : v).replace(/^'/, "").trim(); return /^\d{1,6}$/.test(s) ? ("000000" + s).slice(-6) : s; }
+function splitAccess_(v) { return String(v || "").split(/\s*,\s*/).map(function (a) { return a.trim(); }).filter(Boolean); }
+function clean_(v) { let s = String(v == null ? "" : v).replace(/[\r\n\t]+/g, " ").trim().slice(0, 200); if (/^[=+\-@]/.test(s)) s = "'" + s; return s; }
+function nameFromEmail_(em) { return em.split("@")[0].split(/[._-]/).filter(Boolean).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "); }
+function teamOut_(r) { return { team: String(r.Team || ""), row: Number(r.Row) || 1, lead: String(r.Lead || ""), parent: String(r["Parent team"] || "") }; }
+
+/** Admins: the old list in this file, or "Admin" in the person's Access on the People tab. */
+function isAdmin_(email) {
+  if (ADMIN_EMAILS.indexOf(email) !== -1) return true;
+  const pr = people_()[String(email || "").toLowerCase()];
+  return !!pr && pr.active && pr.access.some(function (a) { return a.toLowerCase() === "admin"; });
+}
+/** Retakes: the old list in this file, or Retake = Yes on the Batches tab. */
+function canRetake_(batch) { return RETAKE_BATCHES.indexOf(batch) !== -1 || batches_().some(function (b) { return b.batch === batch && b.retake; }); }
+
+/** What the site needs to know about the signed-in person (People tab), or null if they're not on it. */
+function me_(user) {
+  const pr = people_()[String(user.email || "").toLowerCase().replace(/\+[^@]*@/, "@")];
+  if (!pr) return { admin: isAdmin_(user.email), people: false };
+  return { people: true, name: pr.name, role: pr.role, team: pr.team, access: pr.access, batch: pr.batch, active: pr.active, admin: isAdmin_(user.email), retake: canRetake_(pr.batch) };
+}
+
+/** People tab row numbers by email, and column positions by header. */
+function peopleRowMap_(sh) {
+  const v = sh.getDataRange().getValues(), h = v[0], col = {}, rows = {};
+  h.forEach(function (name, i) { col[String(name)] = i; });
+  for (let r = 1; r < v.length; r++) { const em = String(v[r][col.Email] || "").trim().toLowerCase(); if (em && !rows[em]) rows[em] = r + 1; }
+  return { col: col, rows: rows };
+}
+
+/** Replace a whole tab's rows (keeps row 1). */
+function writeTable_(name, header, rows) {
+  const sh = sheet_(name, header), last = sh.getLastRow();
+  if (last > 1) sh.getRange(2, 1, last - 1, Math.max(sh.getLastColumn(), header.length)).clearContent();
+  sh.getRange(1, 1, 1, header.length).setValues([header]);
+  if (rows.length) sh.getRange(2, 1, rows.length, header.length).setValues(rows);
+}
+
+/** One row in the Audit tab per change made from the Settings page. */
+function audit_(by, action, target, before, after) {
+  try { appendByHeader_(sheet_(AUDIT_SHEET, AUDIT_HEADER), { "Timestamp": new Date(), "By": by, "Action": action, "Target": target, "Before": String(before || "").slice(0, 45000), "After": String(after || "").slice(0, 45000) }); } catch (e) {}
+}
+
+/** A value from the Settings tab, cached 30s (used on every request). */
+function setting_(key) {
+  const cache = CacheService.getScriptCache(); let all = null; const hit = cache.get("settings_v1");
+  if (hit) all = JSON.parse(hit);
+  else { all = {}; readRows_(SETTINGS_SHEET).forEach(function (r) { if (r.Key) all[r.Key] = String(r.Value); }); try { cache.put("settings_v1", JSON.stringify(all), 30); } catch (e) {} }
+  return all[key] || "";
 }

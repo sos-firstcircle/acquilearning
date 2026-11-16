@@ -63,7 +63,10 @@ window.LMS_CONFIG = {
   function batchOf(email){ const b = roster().batches, find = e => Object.keys(b).find(k => lc(b[k]).includes(e)) || "";
     const e = String(email||"").trim().toLowerCase(), plain = e.replace(/\+[^@]*@/, "@");
     if (plain !== e) { const pb = find(plain); return (C.codeLogin || []).includes(pb) ? pb : ""; }   // a coded person is shared+<id>@...
-    return find(e); }
+    const hit = find(e); if (hit) return hit;
+    const su = storedUser(); return su && su.people && su.email === e ? (su.batch || "") : ""; }   // signed in from the People tab (Settings)
+  /* Signed in from the People tab: their Access list (e.g. ["Department","General","112326"]). */
+  function accessOf(){ const u = storedUser(); return u && u.people ? (u.access || []).map(a => String(a).toLowerCase()) : []; }
   const lc = a => (a||[]).map(e => String(e).trim().toLowerCase());
   function isCompanyEmail(email){
     const d = String(C.allowedDomain||"").toLowerCase();
@@ -74,7 +77,8 @@ window.LMS_CONFIG = {
     if (!isCompanyEmail(email)) return false;
     if (!C.emailLogin) return true;
     const e = String(email).trim().toLowerCase();
-    return lc(roster().admins).includes(e) || lc(roster().learners).includes(e) || !!batchOf(e);
+    if (lc(roster().admins).includes(e) || lc(roster().learners).includes(e) || !!batchOf(e)) return true;
+    const su = storedUser(); return !!su && !!su.people && su.email === e;   // signed in from the People tab
   }
   /* Decode the payload of a Google ID token (for display only; the backend does the real check). */
   function decodeJwt(t){
@@ -95,7 +99,7 @@ window.LMS_CONFIG = {
       return JSON.stringify({ action, token, payload, email: u.email, name: u.name, code: u.code || "" }); };   // email/name are used only in the temporary email-list mode
     const once = ms => { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
       return fetch(C.backendUrl, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: body(), signal: ctl.signal, keepalive: true })   // text/plain avoids a CORS preflight, which Apps Script can't answer
-        .then(r => r.json()).then(j => { clearTimeout(t); if (j && !j.ok && /^code-/.test(String(j.error)) && !opts.as) codeKick(j.error); return j; }).catch(() => { clearTimeout(t); return null; }); };
+        .then(r => r.json()).then(j => { clearTimeout(t); if (j && !j.ok && (/^code-/.test(String(j.error)) || j.error === "removed") && !opts.as) codeKick(j.error); return j; }).catch(() => { clearTimeout(t); return null; }); };
     if (!opts.retry) return once(opts.timeout || 30000);
     return new Promise(resolve => {
       let finished = false, failed = 0; const delays = [0, 6000, 14000];
@@ -110,7 +114,7 @@ window.LMS_CONFIG = {
   let kicked = false;
   function codeKick(err){
     if (kicked) return; kicked = true;
-    try { sessionStorage.setItem(`${KEY}.flash`, err === "code-inactive" ? "Your FC token is no longer active. Please contact Salesops." : "Please sign in again with your FC token.");
+    try { sessionStorage.setItem(`${KEY}.flash`, err === "removed" ? "Your access has been removed. Please contact Salesops." : err === "code-inactive" ? "Your FC token is no longer active. Please contact Salesops." : "Please sign in again with your FC token.");
       localStorage.removeItem(`${KEY}.user`); } catch(e){}
     location.href = (location.pathname.includes("/lessons/") || location.pathname.includes("/sims/") || location.pathname.includes("/exams/")) ? "../index.html" : "index.html";
   }
@@ -124,6 +128,11 @@ window.LMS_CONFIG = {
     return send("myProgress", {}, { retry:true }).then(res => {
       if (!res || !res.ok) return false;
       write("lastsync." + email, Date.now());
+      const su = storedUser();
+      if (res.me && su && su.people && su.email === email && res.me.people) {   // People tab changed (team, access, admin): keep the saved copy current
+        const nu = { ...su, name: res.me.name || su.name, batch: res.me.batch || "", access: res.me.access || [], admin: !!res.me.admin, retake: !!res.me.retake };
+        if (JSON.stringify(nu) !== JSON.stringify(su)) write("user", nu);
+      }
       const key = progressKey(), local = read(key, {}), merged = {}, now = Date.now();
       (res.done || []).forEach(id => { merged[id] = { ...(local[id] || {}), status:"done", updated:(local[id] && local[id].updated) || 0 }; });
       Object.entries(res.results || {}).forEach(([id, r]) => { merged[id] = r; });
@@ -175,7 +184,7 @@ window.LMS_CONFIG = {
     roster, batchOf,
 
     /** May the signed-in person retake exams? (their batch is listed in multiAttempt) */
-    canRetake(){ const u = currentUser(); return !!u && (C.multiAttempt || []).includes(batchOf(u.email)); },
+    canRetake(){ const u = currentUser(); return !!u && ((C.multiAttempt || []).includes(batchOf(u.email)) || !!u.retake); },
 
     /** Honor code (shared-login batches in C.honorCode): the exam intro shows a pledge and a name box; the name is saved with the result. */
     honorRequired(){ const u = currentUser(); return !!u && !u.code && (C.honorCode || []).includes(batchOf(u.email)) && !isPreview(); },   // not needed once the person signed in with their own code (their name is known)
@@ -236,6 +245,19 @@ window.LMS_CONFIG = {
       });
     },
 
+    /** Not on the old lists: ask the Sheet's People tab (Settings). Resolves on success; rejects with "not-on-list", "removed" or "backend". */
+    signInWithPeople(email){
+      email = String(email).trim().toLowerCase();
+      if (!isCompanyEmail(email)) return Promise.reject(new Error("not-company"));
+      return send("whoami", {}, { as: { email, name: email }, retry: true }).then(res => {
+        if (!res) throw new Error("backend");
+        if (!res.ok) throw new Error(res.error === "removed" ? "removed" : "not-on-list");
+        const me = res.me || {};
+        if (!me.people) throw new Error("not-on-list");
+        write("user", { name: me.name || email, email, batch: me.batch || "", access: me.access || [], admin: !!me.admin, retake: !!me.retake, people: true, startDate: C.demoUser.startDate });
+      });
+    },
+
     /** Send people to the sign-in page if they're not signed in. */
     requireSignIn(){
       if (!currentUser() || (!C.demo && !isAllowed(currentUser().email))){ location.href = (location.pathname.includes("/lessons/")||location.pathname.includes("/sims/")) ? "../index.html" : "index.html"; return false; }
@@ -250,9 +272,15 @@ window.LMS_CONFIG = {
     canReview(){ const u = currentUser(); return !u || !(C.noReview || []).includes(batchOf(u.email)); },
 
     /** Existing AMs (batch "000002"): they get the simulations-and-practice dashboard instead of the 10-day path. */
-    isExisting(){ const u = currentUser(); return !!u && batchOf(u.email) === "000002"; },
+    isExisting(){ const u = currentUser(); return !!u && (batchOf(u.email) === "000002" || (!!u.people && !batchOf(u.email) && accessOf().includes("general"))); },
 
-    isAdmin(){ const u = currentUser(); return !!u && (C.demo || [...lc(C.adminEmails), ...lc(roster().admins)].includes(u.email.toLowerCase())); },
+    /** People tab access: has(“general”), has(“team lead”), etc. (always false for people signed in from the old lists) */
+    hasAccess(name){ return accessOf().includes(String(name).toLowerCase()); },
+    /** Finished Day 10: ask the Sheet to add General to their access (People tab only). */
+    grantGeneral(){ const u = currentUser(); if (!u || !u.people || accessOf().includes("general")) return Promise.resolve(null);
+      return send("grantGeneral", {}).then(res => { if (res && res.ok && res.changed) write("user", { ...storedUser(), access: [...(storedUser().access || []), "General"] }); return res; }); },
+
+    isAdmin(){ const u = currentUser(); return !!u && (C.demo || [...lc(C.adminEmails), ...lc(roster().admins)].includes(u.email.toLowerCase()) || (!!u.people && !!u.admin)); },
 
     /** All progress for the signed-in person: { moduleId: {status, score, max, attempts, updated} } */
     progress(){ return read(progressKey(), {}); },
@@ -331,6 +359,15 @@ window.LMS_CONFIG = {
     adminRsvps(){ return send("adminRsvps", {}, { retry:true }); },
 
     chat(question){ return send("chat", { question }, { timeout: 60000 }); },
+    /** Settings page (admins): People, Teams and Batches tabs. Org chart (anyone): directory(). */
+    adminPeople(){ return send("adminPeople", {}, { retry:true }); },
+    directory(){ return send("directory", {}, { retry:true }); },
+    peopleAdd(rows){ return send("peopleAdd", { rows }); },
+    peopleRemove(email){ return send("peopleRemove", { email }); },
+    peopleUpdate(email, fields){ return send("peopleUpdate", { email, fields }); },
+    teamsSave(teams){ return send("teamsSave", { teams }); },
+    teamRename(from, to){ return send("teamRename", { from, to }); },
+    batchesSave(batches){ return send("batchesSave", { batches }); },
     adminData(passcode){ return send("adminData", { passcode }, { retry:true }); },
 
     signOut(){
