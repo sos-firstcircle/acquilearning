@@ -16,7 +16,7 @@ LMS_DAY_DEFS[9] = {
     { id: "d9-practice-log-meeting",  group: "Log a Meeting", openLabel: "Practice", label: "Log a meeting by yourself",                       href: "sims/acqui-practice-log-meeting.html" }
   ],
   sessions: ["s-d6-self", "s-d6-virtual"],   // Nov 19 sessions (Day 6 titles, held on the Day 9 date for batch 110926); ids from LMS_SESSIONS in modules.js
-  // One graded exam: navigation, general information and lead creation / reassignment (exam 1 + 2 merged). 18 questions, 40 points, 45 min.
+  // One graded exam: navigation, general information and lead creation / reassignment (exam 1 + 2 merged). 22 questions, 40 points, 45 min.
   // Pages: sims/acqui-exam-day9.html; scripts sims/acqui/exam-nav.js, exam-leads.js, exam-day9.js; extra screens sims/acqui/lead-ext.js.
   // Built but NOT listed: sims/acqui-exam-activities.html (log a call + meeting) and sims/acqui-exam-onboarding.html (document status + transition).
   exams: [

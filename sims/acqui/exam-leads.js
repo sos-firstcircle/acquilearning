@@ -39,8 +39,8 @@
         { label: "Referrer", w: 0.2, ok: !!q.ref && q.ref.k === "Mia Santos", exp: "Mia Santos" },
         { label: "FC Referrer", w: 0.2, ok: !!q.fc && /^1368/.test(q.fc.k), exp: "you" }
       ] : [
-        { label: "Approver chosen", w: 0.5, ok: !!q.approver, exp: "any approver" },
-        { label: "Channel (Last Touch)", w: 0.5, ok: q.channel === "KAM - Self Generated Leads", exp: "KAM - Self Generated Leads" }
+        { label: "Approver chosen", w: 0.2, ok: !!q.approver, exp: "any approver" },
+        { label: "Channel (Last Touch)", w: 0.8, ok: q.channel === "KAM - Self Generated Leads", exp: "KAM - Self Generated Leads" }
       ];
       var r = { items: items };
       if (c.flags.dup) { r.factor = 0.5; r.factorLabel = "You created a lead that already exists. You should have requested it"; }
@@ -78,7 +78,7 @@
       grade: function(ev, d){ if (dupMsg(ev)) return dupMsg(ev); return ev === "request-sent" && d.id === "287450" ? { fatal: "Pioneer Steel Works is already Onboarded and belongs to another AM. Leads in Risk Review, Onboarded, Unserviceable or Utilized cannot be requested. Always check the status first." } : false; },
       undo: function(){ unrequest(this._ev); } },
 
-    { type: "act", html: true, choice: true, proceed: true, leadId: "228764", pts: 2,
+    { type: "act", html: true, choice: true, proceed: true, leadId: "228764", pts: 5,
       text: "Decide what to do about <b>Lakeshore Hardware</b>",
       chat: { thread: "s2", who: { name: "Your situation", sub: "Self-generated lead", av: "!" }, msgs: [
         { from: "sys", text: "You know a business owner personally: Ramon Cruz, owner of Lakeshore Hardware. You played basketball together for years and he wants to work with you on a loan." } ] },
@@ -86,7 +86,7 @@
       grade: request("228764", "Lakeshore Hardware", false),
       undo: function(){ unrequest(this._ev); } },
 
-    { type: "act", html: true, choice: true, proceed: true, leadId: "", pts: 7,
+    { type: "act", html: true, choice: true, proceed: true, leadId: "", pts: 5,
       text: "Decide what to do about <b>" + A.name + "</b>",
       chat: { thread: "s3", who: { name: "Your situation", sub: "Self-generated lead", av: "!" }, msgs: [
         { from: "sys", text: "You met a business owner at a forum: " + A.owner + ", owner of " + A.name + ". Email: " + A.email + ". Phone: " + A.phone + ". You took a photo of their DTI certificate. It's in your camera roll." },
@@ -95,7 +95,7 @@
       grade: create(A, "KAM Self Generated", false, { ch: 1/7, name: 1/7, type: 1/7, reg: 1/7, cn: 1/7, em: 1/7, ph: 1/7, fake: 1/7 }),
       undo: function(){ removeLead(this._ev); } },
 
-    { type: "act", html: true, noHint: true, choice: true, proceed: true, leadId: "", pts: 10,
+    { type: "act", html: true, noHint: true, choice: true, proceed: true, leadId: "", pts: 5,
       text: "Take care of Mia's referral.",
       chat: { thread: "mia", who: { name: "Mia Santos", sub: "Your referrer · she refers a lot" }, msgs: [
         { from: "them", text: "Hi {ME}! Busy week, I've got a few friends who need financing 🙌" },
