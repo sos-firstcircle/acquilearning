@@ -151,6 +151,7 @@
       if (CFG.askName) {
         var nm = document.getElementById("exname").value.trim();
         if (nm.length < 2) { document.getElementById("exname").style.borderColor = "#b3243a"; document.getElementById("exname").focus(); return; }
+        if (window.LMS && LMS.honorRequired && LMS.honorRequired()) LMS.honorName = nm;   // shared-login batch: the typed name is saved with the grade (see LMS.saveResult)
         AM_NAME = nm; ME = nm; FC_STAFF[0] = "1368 - " + nm; ORIG.concat(BCLS).forEach(function(o){ o.am = nm; }); render();
       }
       begin();

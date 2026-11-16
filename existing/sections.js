@@ -31,6 +31,17 @@ window.LMS_EXISTING = [
       { id: "d5-referrer-demo",      kind: "lecture",  label: "Registering a referrer in Slack",          href: "sims/slack-referrer-demo.html",     thumb: "referrer-demo",     desc: "Register a new regular referrer with /regularnew in Slack: the form, the ID and the proof of bank account." },
       { id: "d5-referrer-practice",  kind: "practice", label: "Registering a Referrer in Slack",          href: "sims/slack-referrer-practice.html", thumb: "referrer-practice", desc: "Do it yourself in a Slack look-alike: the command, the form and the right documents. Scored out of 100, not graded." },
       { id: "d5-reassign-practice", kind: "practice", label: "Getting Leads in Acqui Service",   href: "sims/acqui-reassign-exam.html",    thumb: "reassign-practice", desc: "5 situations in the Acqui Service sim: lead requests and new leads. Not graded." }
+    ]},
+    { label: "Logging a call", items: [
+      { id: "d9-demo-log-call",     kind: "lecture",  label: "Add a contact and log a call",             href: "sims/acqui-demo-log-call.html",     thumb: "demo-log-call",     desc: "A guided run: add a contact in Acqui Service and log the call." },
+      { id: "d9-practice-log-call", kind: "practice", label: "Add a contact and log a call by yourself", href: "sims/acqui-practice-log-call.html", thumb: "practice-log-call", desc: "Do it yourself in the Acqui Service sim. Not graded." }
+    ]},
+    { label: "Logging a meeting", items: [
+      { id: "d9-demo-log-meeting",     kind: "lecture",  label: "Log a meeting",              href: "sims/acqui-demo-log-meeting.html",     thumb: "demo-log-meeting",     desc: "A guided run: log a meeting in Acqui Service." },
+      { id: "d9-practice-log-meeting", kind: "practice", label: "Log a meeting by yourself",  href: "sims/acqui-practice-log-meeting.html", thumb: "practice-log-meeting", desc: "Do it yourself in the Acqui Service sim. Not graded." }
+    ]},
+    { label: "Acqui Service exam", items: [
+      { id: "exam-acqui-day9", kind: "exam", label: "Acqui Service Exam: Navigation, General Information and Leads", href: "sims/acqui-exam-day9.html", thumb: "exam-acqui-day9", desc: "22 situations in the Acqui Service sim: navigation, general information and leads. 45 minutes, 40 points." }
     ]}
   ]}
 ];
