@@ -142,6 +142,7 @@ function modelFromSheet(dir) {
     const lp = dir.people.find(p => p.name.toLowerCase() === String(t.lead || "").toLowerCase());
     // a team lead shows on top of the team(s) they lead, not as a member anywhere
     const members = (byTeam[t.team] || []).filter(p => !leads[p.name.toLowerCase()]).sort((a, b) => (a.order || 9999) - (b.order || 9999) || a.name.localeCompare(b.name)).map(asCard);   // order set on Settings > Teams, then A to Z
+    if (t.lead && !lp) t = { ...t, lead: "" };   // a Lead who was removed (not Active on the People tab) doesn't show
     (rowsMap[t.row] = rowsMap[t.row] || []).push({ name: t.team, lead: t.lead ? [t.lead, (lp && lp.role) || "Team Leader", "", lp && dir.latest && lp.batch === dir.latest ? "new" : ""] : null, parent: t.parent, members });
   });
   const known = new Set(dir.teams.map(t => t.team));
