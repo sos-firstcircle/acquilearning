@@ -239,7 +239,7 @@ function doPost(e) {
     if (req.action === "whoami") return json_({ ok: true, me: me_(user) });
     if (req.action === "directory") {           // any signed-in person: the org chart (names, roles, teams only; no emails)
       const ppl = people_();
-      return json_({ ok: true, people: Object.keys(ppl).map(function (e) { return ppl[e]; }).filter(function (r) { return r.active; }).map(function (r) { return { name: r.name, role: r.role, team: r.team, batch: r.batch }; }),
+      return json_({ ok: true, people: Object.keys(ppl).map(function (e) { return ppl[e]; }).filter(function (r) { return r.active; }).map(function (r) { return { name: r.name, role: r.role, team: r.team, batch: r.batch, order: r.order }; }),
         teams: readRows_(TEAMS_SHEET).map(teamOut_), latest: latestBatch_() });
     }
     if (req.action === "adminPeople") {         // Settings page: everything, including emails, access and removed people
@@ -308,6 +308,15 @@ function doPost(e) {
       for (let r = 1; r < tv.length; r++) { if (String(tv[r][cN]).trim() === from) ts.getRange(r + 1, cN + 1).setValue(to); if (cP > -1 && String(tv[r][cP]).trim() === from) ts.getRange(r + 1, cP + 1).setValue(to); }
       audit_(user.email, "rename team", from, from, to + " (" + n + " people moved)"); clearPeopleCache_();
       return json_({ ok: true, moved: n });
+    }
+    if (req.action === "peopleOrder") {         // order of the people in one team on the org chart (People tab "Order" column)
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const emails = (Array.isArray(p.emails) ? p.emails : []).slice(0, 300).map(function (e) { return String(e || "").trim().toLowerCase(); });
+      const sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER); ensureColumn_(sh, "Order");
+      const map = peopleRowMap_(sh);
+      emails.forEach(function (em, i) { const r = map.rows[em]; if (r) sh.getRange(r, map.col.Order + 1).setValue(i + 1); });
+      audit_(user.email, "order", clean_(p.team), "", emails.join(", ").slice(0, 45000)); clearPeopleCache_();
+      return json_({ ok: true });
     }
     if (req.action === "batchesSave") {         // the whole Batches table (create, rename, set latest)
       if (!isAdmin_(user.email)) throw new Error("not-admin");
@@ -492,7 +501,7 @@ function people_() {
     if (leads.indexOf(String(r.Name || "").trim().toLowerCase()) !== -1 && !access.some(function (a) { return a.toLowerCase() === "team lead"; })) access.push("Team Lead");
     let batch = batchText_(r.Batch);
     if (!batch) batch = access.filter(function (a) { return ids.indexOf(a) !== -1; })[0] || "";
-    out[em] = { email: em, name: String(r.Name || "").trim(), role: String(r.Role || "").trim(), team: String(r.Team || "").trim(), status: st, active: st.toLowerCase() !== "inactive", access: access, batch: batch };
+    out[em] = { email: em, name: String(r.Name || "").trim(), role: String(r.Role || "").trim(), team: String(r.Team || "").trim(), status: st, active: st.toLowerCase() !== "inactive", access: access, batch: batch, order: Number(r.Order) || 0 };
   });
   try { cache.put("people_v1", JSON.stringify(out), 30); } catch (e) {}
   return out;

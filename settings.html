@@ -40,6 +40,7 @@
   .orgrow.over{border-color:var(--teal);background:var(--teal-soft)}
   td.grip{cursor:grab;color:var(--ink-3);width:14px;padding-right:0;user-select:none}
   tr[draggable="true"]:active{cursor:grabbing}
+  .mchip{cursor:grab;user-select:none}
   .orgrow h3{font-size:15px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
   .orgrow .t{margin-top:10px}
   .addp{border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;background:var(--mist)}
@@ -75,7 +76,7 @@ function start(){
   const accChip = a => { const k = a.toLowerCase(); return `<span class="chip ${k === "admin" ? "admin" : k === "general" ? "general" : k === "team lead" ? "lead" : ""}">${esc(a)}</span>`; };
   const teamNames = () => [...new Set(T.map(t => t.team).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const activePeople = () => D.people.filter(p => p.active);
-  const membersOf = team => activePeople().filter(p => p.team === team);
+  const membersOf = team => activePeople().filter(p => p.team === team).sort((a, b) => (a.order || 9999) - (b.order || 9999) || a.name.localeCompare(b.name));   // directory order (drag on the Teams tab), then A to Z
   const inBatch = (p, id) => p.batch === id || (p.access || []).includes(id);
   const msg = (id, text, ok) => { const m = document.getElementById(id); if (m) { m.textContent = text; m.className = "msg " + (ok ? "ok" : "err"); } };
   const errText = r => !r ? "Couldn't reach the Sheet. Try again in a moment." : r.error === "unknown-action" ? "The Apps Script hasn't been updated yet (deploy the new Code.gs)." : r.error === "not-admin" ? "Only admins can do this." : r.error === "cannot-remove-self" ? "You can't remove yourself." : "Couldn't save (" + r.error + ").";
@@ -166,7 +167,7 @@ function start(){
     return `<div class="addp"><h3 style="margin:0">Add people</h3>
       <label class="f">Emails (one per line, or separated by commas)</label><textarea id="aEmails" placeholder="first.last@firstcircle.com"></textarea>
       <div class="row" style="align-items:flex-end">
-        <div><label class="f">Role</label><input id="aRole" value="Acquisition Manager"></div>
+        <div><label class="f">Role</label>${roleField("Acquisition Manager", "aRole")}</div>
         <div><label class="f">Team</label>${teamSelect("", "aTeam")}</div>
         <div><label class="f">Batch</label>${batchSelect("", "aBatch")}</div>
       </div>
@@ -179,7 +180,7 @@ function start(){
     return `<tr><td colspan="6" style="background:var(--mist)">
       <div class="row" style="align-items:flex-end">
         <div><label class="count">Name</label><br><input id="eName" value="${esc(p.name)}"></div>
-        <div><label class="count">Role</label><br><input id="eRole" value="${esc(p.role)}"></div>
+        <div><label class="count">Role</label><br>${roleField(p.role, "eRole")}</div>
         <div><label class="count">Team</label><br>${teamSelect(p.team, "eTeam")}</div>
         <div><label class="count">Batch</label><br>${batchSelect(p.batch, "eBatch")}</div>
       </div>
@@ -187,6 +188,11 @@ function start(){
       <div class="row" style="margin-top:10px"><button class="btn primary sm" data-esave="${esc(p.email)}">Save</button><button class="btn sm" data-ecancel>Cancel</button><span class="count">${esc(p.email)}</span></div>
       <div id="msgEdit" class="msg"></div></td></tr>`;
   }
+  /* Role: Acquisition Manager / Acquisition Team Leader, or "Others" with a typed role */
+  const ROLES = ["Acquisition Manager", "Acquisition Team Leader"];
+  const roleField = (cur, id) => { const opts = [...ROLES, ...(cur && !ROLES.includes(cur) ? [cur] : [])];   // a person's own role (e.g. Partnerships Manager) is listed as itself
+    return `<span class="row" style="gap:6px;flex-wrap:nowrap"><select id="${id}" data-role="${id}">${opts.map(r => `<option ${r === cur ? "selected" : ""}>${esc(r)}</option>`).join("")}<option value="__other">Others (type a role)</option></select><input id="${id}Other" placeholder="Type the role" style="display:none"></span>`; };
+  const roleValue = id => { const v = document.getElementById(id).value; return v === "__other" ? document.getElementById(id + "Other").value.trim() || "Acquisition Manager" : v; };
   const checked = name => [...document.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
   const withBatch = (acc, batch) => batch && !acc.includes(batch) ? [...acc, batch] : acc;
 
@@ -209,10 +215,10 @@ function start(){
         <div class="row" style="margin-top:10px"><input placeholder="New team name" data-newteam="${r}" style="min-width:200px"><button class="btn sm" data-addteam="${r}">Add team</button></div></div>`;
     };
     const teamPeople = team => `<tr><td></td><td colspan="5" style="background:var(--mist)">
-        <div>${membersOf(team).sort((a, b) => a.name.localeCompare(b.name)).map(p => `<span class="chip">${esc(p.name)} <button class="linkbtn red" style="padding:0 2px" title="Take out of ${esc(team)}" data-tout="${esc(p.email)}">×</button></span>`).join(" ") || `<span class="count">Nobody in this team yet.</span>`}</div>
+        <div data-mteam="${esc(team)}">${membersOf(team).map(p => `<span class="chip mchip" draggable="true" data-memail="${esc(p.email)}" title="Drag to change the order on the org chart">⠿ ${esc(p.name)} <button class="linkbtn red" style="padding:0 2px" title="Take out of ${esc(team)}" data-tout="${esc(p.email)}">×</button></span>`).join(" ") || `<span class="count">Nobody in this team yet.</span>`}</div>
         <div class="row" style="margin-top:10px"><input list="peopleList" data-tadd="${esc(team)}" placeholder="Name or email (new emails are added)" style="min-width:280px;flex:1;max-width:420px"><button class="btn sm" data-taddbtn="${esc(team)}">Add to ${esc(team)}</button></div>
         <datalist id="peopleList">${activePeople().filter(p => p.team !== team).sort((a, b) => a.name.localeCompare(b.name)).map(p => `<option value="${esc(p.email)}">${esc(p.name)}${p.team ? " · " + esc(p.team) : ""}</option>`).join("")}</datalist>
-        <div class="count" style="margin-top:6px">Adding someone already on the list moves them here from their current team. Changes here save right away.</div></td></tr>`;
+        <div class="count" style="margin-top:6px">Drag names to set their order on the org chart. Adding someone already on the list moves them here from their current team. Changes here save right away.</div></td></tr>`;
     const unknown = [...new Set(activePeople().map(p => p.team).filter(t => t && !teamNames().includes(t)))];
     pane.innerHTML = `<p class="lead" style="margin-top:0">Teams show on the org chart row by row, A to Z. Drag a team (⠿) to move it to another row. Anyone set as a team's Lead gets Team Lead access automatically.</p>
       ${unknown.length ? `<div class="warn">People are in teams that aren't listed here: ${unknown.map(esc).join(", ")}. Add them as teams, or change those people's team.</div>` : ""}
@@ -269,7 +275,7 @@ function start(){
       if (bad.length) return msg("msgAdd", "Not First Circle emails: " + bad.join(", "), false);
       const batch = document.getElementById("aBatch").value, acc = withBatch(checked("aAcc"), batch);
       t.disabled = true; msg("msgAdd", "Adding…", true);
-      const r = await LMS.peopleAdd(emails.map(email => ({ email, role: document.getElementById("aRole").value.trim(), team: document.getElementById("aTeam").value, batch, access: acc.join(", ") })));
+      const r = await LMS.peopleAdd(emails.map(email => ({ email, role: roleValue("aRole"), team: document.getElementById("aTeam").value, batch, access: acc.join(", ") })));
       t.disabled = false;
       if (!r || !r.ok) return msg("msgAdd", errText(r), false);
       const skipped = emails.length - r.added.length - r.readded.length;
@@ -279,7 +285,7 @@ function start(){
     if (t.hasAttribute("data-ecancel")) { S.edit = ""; renderPeople(pane); return; }
     if (t.dataset.esave) {
       const batch = document.getElementById("eBatch").value;
-      const fields = { name: document.getElementById("eName").value.trim(), role: document.getElementById("eRole").value.trim(), team: document.getElementById("eTeam").value, batch, access: withBatch(checked("eAcc"), batch).join(", ") };
+      const fields = { name: document.getElementById("eName").value.trim(), role: roleValue("eRole"), team: document.getElementById("eTeam").value, batch, access: withBatch(checked("eAcc"), batch).join(", ") };
       if (!fields.name) return msg("msgEdit", "Name can't be empty.", false);
       t.disabled = true; msg("msgEdit", "Saving…", true);
       const r = await LMS.peopleUpdate(t.dataset.esave, fields);
@@ -379,6 +385,7 @@ function start(){
   });
   app.addEventListener("change", e => {
     const t = e.target, pane = document.getElementById("pane");
+    if (t.dataset.role) { const o = document.getElementById(t.dataset.role + "Other"); o.style.display = t.value === "__other" ? "" : "none"; if (t.value === "__other") o.focus(); return; }
     if (t.id === "pteam") { S.team = t.value; renderPeople(pane); }
     if (t.id === "pbatch") { S.batch = t.value; renderPeople(pane); }
     if (t.id === "premoved") { S.removed = t.checked; renderPeople(pane); }
@@ -390,6 +397,17 @@ function start(){
     if (t.dataset.bname !== undefined) { B[+t.dataset.bname].name = t.value.trim(); S.batchesDirty = true; renderBatches(pane); }
   });
   // Teams: drag a team to another row
+  // Members: drag a name to change its place in the team (saved right away)
+  let dragM = null;
+  app.addEventListener("dragstart", e => { const c = e.target.closest && e.target.closest("[data-memail]"); if (!c) return; e.stopPropagation(); dragM = c; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", c.dataset.memail); } catch (x) {} setTimeout(() => c.style.opacity = ".4"); }, true);
+  app.addEventListener("dragover", e => { if (!dragM) return; const c = e.target.closest && e.target.closest("[data-memail]"); if (!c || c === dragM || c.parentNode !== dragM.parentNode) return; e.preventDefault(); e.stopPropagation();
+    const r = c.getBoundingClientRect(), after = (e.clientX - r.left) > r.width / 2; c.parentNode.insertBefore(dragM, after ? c.nextSibling : c); }, true);
+  app.addEventListener("dragend", async e => { if (!dragM) return; const box = dragM.parentNode; dragM.style.opacity = ""; dragM = null;
+    const team = box.dataset.mteam, emails = [...box.querySelectorAll("[data-memail]")].map(x => x.dataset.memail);
+    const before = membersOf(team).map(p => p.email); if (JSON.stringify(before) === JSON.stringify(emails)) return;
+    emails.forEach((em, i) => { const p = D.people.find(x => x.email === em); if (p) p.order = i + 1; });
+    msg("msgTeams", "Saving order…", true); const r = await LMS.peopleOrder(team, emails);
+    msg("msgTeams", r && r.ok ? `Order saved for ${team}.` : errText(r), r && r.ok); }, true);
   app.addEventListener("dragstart", e => { const tr = e.target.closest && e.target.closest("[data-drag]"); if (!tr) return; S.dragK = +tr.dataset.drag; e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", tr.dataset.drag); } catch (x) {} tr.style.opacity = ".4"; });
   app.addEventListener("dragend", e => { const tr = e.target.closest && e.target.closest("[data-drag]"); if (tr) tr.style.opacity = ""; document.querySelectorAll(".orgrow.over").forEach(x => x.classList.remove("over")); });
   app.addEventListener("dragover", e => { const box = e.target.closest && e.target.closest("[data-droprow]"); if (!box || S.dragK < 0) return; e.preventDefault(); document.querySelectorAll(".orgrow.over").forEach(x => x !== box && x.classList.remove("over")); box.classList.add("over"); });

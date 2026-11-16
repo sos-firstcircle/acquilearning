@@ -66,7 +66,7 @@ window.LMS_CONFIG = {
     const hit = find(e); if (hit) return hit;
     const su = storedUser(); return su && su.people && su.email === e ? (su.batch || "") : ""; }   // signed in from the People tab (Settings)
   /* Signed in from the People tab: their Access list (e.g. ["Department","General","112326"]). */
-  function accessOf(){ const u = storedUser(); return u && u.people ? (u.access || []).map(a => String(a).toLowerCase()) : []; }
+  function accessOf(){ const u = storedUser(); return u ? ((u.people ? u.access : u.peopleAccess) || []).map(a => String(a).toLowerCase()) : []; }   // old-list sign-ins who are also on the People tab keep their Access in peopleAccess
   const lc = a => (a||[]).map(e => String(e).trim().toLowerCase());
   function isCompanyEmail(email){
     const d = String(C.allowedDomain||"").toLowerCase();
@@ -132,6 +132,9 @@ window.LMS_CONFIG = {
       if (res.me && su && su.people && su.email === email && res.me.people) {   // People tab changed (team, access, admin): keep the saved copy current
         const nu = { ...su, name: res.me.name || su.name, batch: res.me.batch || "", access: res.me.access || [], admin: !!res.me.admin, retake: !!res.me.retake };
         if (JSON.stringify(nu) !== JSON.stringify(su)) write("user", nu);
+      } else if (res.me && su && !su.people && su.email === email) {            // signed in from the old lists: only their People-tab Access is kept (for General after Day 10); batch, name and rules stay as before
+        const pa = res.me.people ? (res.me.access || []) : undefined;
+        if (JSON.stringify(pa) !== JSON.stringify(su.peopleAccess)) { const nu = { ...su }; if (pa) nu.peopleAccess = pa; else delete nu.peopleAccess; write("user", nu); }
       }
       const key = progressKey(), local = read(key, {}), merged = {}, now = Date.now();
       (res.done || []).forEach(id => { merged[id] = { ...(local[id] || {}), status:"done", updated:(local[id] && local[id].updated) || 0 }; });
@@ -277,8 +280,8 @@ window.LMS_CONFIG = {
     /** People tab access: has(“general”), has(“team lead”), etc. (always false for people signed in from the old lists) */
     hasAccess(name){ return accessOf().includes(String(name).toLowerCase()); },
     /** Finished Day 10: ask the Sheet to add General to their access (People tab only). */
-    grantGeneral(){ const u = currentUser(); if (!u || !u.people || accessOf().includes("general")) return Promise.resolve(null);
-      return send("grantGeneral", {}).then(res => { if (res && res.ok && res.changed) write("user", { ...storedUser(), access: [...(storedUser().access || []), "General"] }); return res; }); },
+    grantGeneral(){ const u = currentUser(); if (!u || !(u.people || u.peopleAccess) || accessOf().includes("general")) return Promise.resolve(null);   // only people on the People tab
+      return send("grantGeneral", {}).then(res => { if (res && res.ok && res.changed) { const su = storedUser(), k = su.people ? "access" : "peopleAccess"; write("user", { ...su, [k]: [...(su[k] || []), "General"] }); } return res; }); },
 
     isAdmin(){ const u = currentUser(); return !!u && (C.demo || [...lc(C.adminEmails), ...lc(roster().admins)].includes(u.email.toLowerCase()) || (!!u.people && !!u.admin)); },
 
@@ -367,6 +370,7 @@ window.LMS_CONFIG = {
     peopleUpdate(email, fields){ return send("peopleUpdate", { email, fields }); },
     teamsSave(teams){ return send("teamsSave", { teams }); },
     teamRename(from, to){ return send("teamRename", { from, to }); },
+    peopleOrder(team, emails){ return send("peopleOrder", { team, emails }); },
     batchesSave(batches){ return send("batchesSave", { batches }); },
     adminData(passcode){ return send("adminData", { passcode }, { retry:true }); },
 

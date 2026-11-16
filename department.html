@@ -132,7 +132,7 @@ function modelFromFile() {
   return rows;
 }
 function modelFromSheet(dir) {
-  dir = { ...dir, people: dir.people.filter(p => !/^test account$/i.test(p.role || "")) };   // test logins (Role "Test account") never show on the chart
+  dir = { ...dir, people: dir.people.filter(p => !/^(test account|shared login)$/i.test(p.role || "")) };   // test logins (Role "Test account") never show on the chart
   const byTeam = {}, leads = {};
   dir.teams.forEach(t => { if (t.lead) leads[t.lead.toLowerCase()] = true; });
   dir.people.forEach(p => (byTeam[p.team || ""] = byTeam[p.team || ""] || []).push(p));
@@ -140,7 +140,8 @@ function modelFromSheet(dir) {
   const rowsMap = {};
   dir.teams.forEach(t => {
     const lp = dir.people.find(p => p.name.toLowerCase() === String(t.lead || "").toLowerCase());
-    const members = (byTeam[t.team] || []).filter(p => !leads[p.name.toLowerCase()])   // a team lead shows on top of the team(s) they lead, not as a member anywhere.sort((a, b) => a.name.localeCompare(b.name)).map(asCard);
+    // a team lead shows on top of the team(s) they lead, not as a member anywhere
+    const members = (byTeam[t.team] || []).filter(p => !leads[p.name.toLowerCase()]).sort((a, b) => (a.order || 9999) - (b.order || 9999) || a.name.localeCompare(b.name)).map(asCard);   // order set on Settings > Teams, then A to Z
     (rowsMap[t.row] = rowsMap[t.row] || []).push({ name: t.team, lead: t.lead ? [t.lead, (lp && lp.role) || "Team Leader", "", lp && dir.latest && lp.batch === dir.latest ? "new" : ""] : null, parent: t.parent, members });
   });
   const known = new Set(dir.teams.map(t => t.team));
