@@ -13,10 +13,11 @@
   var css = document.createElement("style");
   css.textContent =
     "#lx{position:fixed;inset:0;background:rgba(10,30,30,.55);display:none;align-items:center;justify-content:center;gap:12px;z-index:900;padding:14px}body.has-xp #lx{right:340px}" +
-    ".lxp{background:#fff;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);max-height:92vh;display:flex;flex-direction:column;overflow:hidden;font-size:12px;color:#17323a}" +
+    ".lxp{background:#fff;border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.35);max-height:calc((100vh - 24px) / 1.15);min-width:0;display:flex;flex-direction:column;overflow:hidden;font-size:12px;color:#17323a}" +
     ".lxp .lh2{padding:16px 18px 8px;display:flex;justify-content:space-between;align-items:flex-start}.lxp .lh2 h3{margin:0;font-size:16px}.lxp .lh2 small{display:block;font-size:9px;letter-spacing:.5px;color:#6a8087;font-weight:700;margin-bottom:2px}" +
     ".lxp .lb{padding:4px 18px 8px;overflow:auto;flex:1}.lxp .lf{padding:10px 18px 14px;display:flex;justify-content:flex-end;gap:8px;border-top:1px solid #eef2f2}" +
     ".lxp .lf .btn{font-size:12px;padding:8px 16px}.lx-x{cursor:pointer;font-size:18px;border:0;background:none;color:#6a8087}" +
+    ".lxp.lx-sm .lx-l{margin:9px 0 3px}.lx-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}.lx-2 select,.lx-2 input{width:100%;box-sizing:border-box}" +
     ".lx-l{display:block;font-size:11.5px;font-weight:600;margin:12px 0 5px}.lx-l i{color:#b3243a;font-style:normal}" +
     ".lxp select,.lxp input[type=text],.lxp textarea{width:100%;border:1px solid #d5dfe0;border-radius:8px;padding:9px 11px;font:inherit;font-size:12px;background:#fff;outline:none}.lxp textarea{min-height:70px;resize:vertical}" +
     ".lxp select:focus,.lxp input:focus,.lxp textarea:focus{border-color:var(--teal)}" +
@@ -90,7 +91,7 @@
   function openLog(l){
     var st = { kind: "call", date: dtNow(), type: "", outcome: "", contact: "", q: "Yes", dq: [], cash: "", fmt: "Face-to-Face Meeting", purpose: "", pb: "No playbook", sug: "", vals: {}, notes: "", warn: "" };
     var cs = contactsOf(l);
-    lx.innerHTML = '<div class="lxp" style="width:430px"><div class="lh2"><h3>Log Activity</h3><button class="lx-x" id="lx-x">×</button></div><div class="lb" id="lx-l"></div><div class="lf" id="lx-f"></div></div><div class="lxp" id="lx-r" style="width:320px;align-self:stretch;max-height:92vh"></div>';
+    lx.innerHTML = '<div class="lxp" style="width:430px"><div class="lh2"><h3>Log Activity</h3><button class="lx-x" id="lx-x">×</button></div><div class="lb" id="lx-l"></div><div class="lf" id="lx-f"></div></div><div class="lxp" id="lx-r" style="width:320px;align-self:stretch;max-height:calc((100vh - 24px) / 1.15)"></div>';
     lx.style.display = "flex";
     var Lb = lx.querySelector("#lx-l"), Lf = lx.querySelector("#lx-f"), R = lx.querySelector("#lx-r");
     function left(){
@@ -100,7 +101,7 @@
       else s += '<label class="lx-l">Meeting Format <i>*</i></label><select data-s="fmt">' + FORMATS.map(function(o){ return '<option' + (st.fmt === o ? " selected" : "") + '>' + o + '</option>'; }).join("") + '</select>' +
         '<label class="lx-l">Meeting Purpose <i>*</i></label><select data-s="purpose"><option value="">Select purpose</option>' + PURPOSES.map(function(o){ return '<option' + (st.purpose === o ? " selected" : "") + '>' + o + '</option>'; }).join("") + '</select>';
       s += '<label class="lx-l">Call Outcome <i>*</i></label><select data-s="outcome"><option value="">Select outcome</option>' + OUTCOMES.map(function(o){ return '<option' + (st.outcome === o ? " selected" : "") + '>' + o + '</option>'; }).join("") + '</select>' +
-        '<label class="lx-l">Contact <i>*</i></label><select data-s="contact"><option value="">Select contact</option>' + cs.map(function(c){ return '<option' + (st.contact === cname(c) ? " selected" : "") + '>' + esc(cname(c)) + ' · FINANCE_TEAM</option>'; }).join("") + '</select>' +
+        '<label class="lx-l">Contact <i>*</i></label><select data-s="contact"><option value="">Select contact</option>' + cs.map(function(c){ return '<option' + (st.contact === cname(c) ? " selected" : "") + '>' + esc(cname(c)) + ' · ' + (c.role ? c.role.toUpperCase().replace(/\s+/g, "_") : "CONTACT") + '</option>'; }).join("") + '</select>' +
         '<label class="lx-l">Is Qualified</label><div class="lx-yn" id="lq"><button type="button" data-v="Yes" class="' + (st.q === "Yes" ? "on" : "") + '">Yes</button><button type="button" data-v="No" class="' + (st.q === "No" ? "on" : "") + '">No</button></div>';
       if (st.q === "No") s += '<label class="lx-l">SQL Disqualification Reasons</label><div class="lx-dq">' + DQ.map(function(d){ return '<label><input type="checkbox" data-dq="' + esc(d) + '"' + (st.dq.indexOf(d) >= 0 ? " checked" : "") + '> ' + esc(d) + '</label>'; }).join("") + '</div>';
       s += '<label class="lx-l">What date in the next 12 months is the business most likely to be short of cash?</label><input type="text" data-s="cash" placeholder="Select date (optional)" value="' + esc(st.cash) + '">';
@@ -167,14 +168,14 @@
 
   /* ---------- Add Contact ---------- */
   function openContact(l){
-    var ROLES = ["", "Applicant", "Shareholder", "Director", "Authorized Signatory", "Finance Head", "Others"], RELS = ["", "Gatekeeper", "Stakeholder", "Decision Maker", "Primary Contact"];
-    lx.innerHTML = '<div class="lxp" style="width:420px"><div class="lh2"><h3>Add Contact</h3><button class="lx-x" id="lx-x">×</button></div><div class="lb">' +
-      '<label class="lx-l" style="margin-top:0"><b>Contact Details</b></label><label class="lx-l">First Name <i>*</i></label><input type="text" id="cf">' +
-      '<label class="lx-l">Last Name <i>*</i></label><input type="text" id="cl">' +
+    var ROLES = ["", "Applicant", "Owner", "Shareholder", "Director", "Authorized Signatory", "Finance Head", "Others"], RELS = ["", "Gatekeeper", "Stakeholder", "Decision Maker", "Primary Contact"];
+    lx.innerHTML = '<div class="lxp lx-sm" style="width:370px;align-self:center"><div class="lh2"><h3>Add Contact</h3><button class="lx-x" id="lx-x">×</button></div><div class="lb">' +
+      '<label class="lx-l" style="margin-top:0"><b>Contact Details</b></label><div class="lx-2"><div><label class="lx-l">First Name <i>*</i></label><input type="text" id="cf"></div>' +
+      '<div><label class="lx-l">Last Name <i>*</i></label><input type="text" id="cl"></div></div>' +
       '<label class="lx-l">Phone Numbers</label><div id="ph"><input type="text" class="ph" placeholder="09XXXXXXXXX"></div><a class="link" id="aph" style="font-size:11px;cursor:pointer;display:block;margin-top:5px">+ Add phone</a>' +
       '<label class="lx-l">Email Addresses</label><div id="em"><input type="text" class="em" placeholder="email@example.com"></div><a class="link" id="aem" style="font-size:11px;cursor:pointer;display:block;margin-top:5px">+ Add email</a>' +
-      '<label class="lx-l"><b>Role at This Company</b></label><label class="lx-l">Role</label><select id="cr">' + ROLES.map(function(o){ return '<option>' + (o || "—") + '</option>'; }).join("") + '</select>' +
-      '<label class="lx-l">Relationship Type</label><select id="cy">' + RELS.map(function(o){ return '<option>' + (o || "—") + '</option>'; }).join("") + '</select>' +
+      '<label class="lx-l"><b>Role at This Company</b></label><div class="lx-2"><div><label class="lx-l">Role</label><select id="cr">' + ROLES.map(function(o){ return '<option>' + (o || "—") + '</option>'; }).join("") + '</select></div>' +
+      '<div><label class="lx-l">Relationship Type</label><select id="cy">' + RELS.map(function(o){ return '<option>' + (o || "—") + '</option>'; }).join("") + '</select></div></div>' +
       '<label class="lx-l">Left Company At</label><input type="text" id="cd" placeholder="mm/dd/yyyy"></div><div class="lf"><button class="btn" id="lx-c">Cancel</button><button class="btn dark" id="lx-ok">Add Contact</button></div></div>';
     lx.style.display = "flex"; lx.querySelector("#lx-x").onclick = lx.querySelector("#lx-c").onclick = closeLx;
     var add = function(box, cls, ph){ var i = document.createElement("input"); i.type = "text"; i.className = cls; i.placeholder = ph; i.style.marginTop = "6px"; lx.querySelector(box).appendChild(i); };

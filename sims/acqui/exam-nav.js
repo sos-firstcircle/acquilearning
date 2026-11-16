@@ -1,5 +1,5 @@
 /* Day 9 graded exam 1: Acqui Service Navigation + General Information (20 min). Loaded before exam.js. Hints are off (graded).
-   Part 1 navigation (7 questions), Part 2 general information on a lead (10 questions). Each question is worth 1 point; a wrong answer costs 0.25. */
+   Part 1 navigation (7 questions), Part 2 general information on a lead (6 questions). Each question is worth 1 point; a wrong answer costs 0.25. */
 (function(){
   function L(id){ return LEADS.filter(function(l){ return l.id === id; })[0]; }
   var onLead = function(id, tab){ return function(ev, d){ return ev === "render" && d.route === "lead" && d.id === id && (!tab || S.ltab === tab); }; };
@@ -15,27 +15,20 @@
       check: function(ev, d){ return ev === "filter" && d.key === "status" && d.vals.length === 1 && d.vals[0] === "Utilized" && location.hash.indexOf("#/leads") === 0; } },
     { type: "input", text: "How many of your leads are Utilized?", placeholder: "Type a number",
       answer: function(){ return [String(LEADS.filter(function(l){ return l.owner === "me" && l.status === "Utilized"; }).length)]; } },
-    { type: "nav", text: "Show only your originations from October 2026.",
-      check: function(ev, d){ return ev === "filter" && d.key === "cov" && d.by === "Monthly" && d.mo === 9 && d.yr === 2026; } },
+    { type: "nav", text: "Show only your Disbursed originations from October 2026.",
+      check: function(ev, d){ var mo = (S.by || "Monthly") === "Monthly" && +(S.mo == null ? 9 : S.mo) === 9 && +(S.yr || 2026) === 2026, st = S.ost && S.ost.length === 1 && S.ost[0] === "Disbursed";
+        return ev === "filter" && (d.key === "cov" || d.key === "ost") && mo && st && location.hash.indexOf("#/originations") === 0; } },
     { type: "nav", text: "Open the Open BCL details of Golden Rice and Feeds.",
       check: function(ev, d){ return ev === "bcl-detail" && d === "371014"; } },
     /* ---- Part 2: general information on a lead ---- */
     { type: "input", text: "Part 2 · General information. Find <b>Mike's Banana Chips (Test)</b>. What is its Lead ID?", html: true, placeholder: "Type the Lead ID",
       answer: function(){ return ["212766"]; } },
-    { type: "mcq", text: "Who is the owner of lead 305522 (Davao Highland Coffee)?", choices: ["Aaron Test (AM)", "Alan Smyth", "Tina Teamlead", "Unassigned"],
-      answer: function(){ return [L("305522").owner]; } },
-    { type: "input", text: "What is the CLO amount of Sunrise Agri Corp (lead 170240)?", placeholder: "Type the amount",
-      answer: function(){ return [String(L("170240").clo)]; } },
-    { type: "mcq", text: "What is the priority of the open task on Blue Harbor Masters Inc. (lead 174297)?", choices: ["Low", "Medium", "High", "Urgent"],
-      answer: function(){ return [L("174297").task.pr]; } },
-    { type: "input", text: "Hotel Palmera Group (lead 316266) has related parties. Which company is its affiliate?", placeholder: "Type the company name",
-      answer: function(){ return ["Palmera Leisure Corp.", "Palmera Leisure Corp", "Palmera Leisure"]; } },
     { type: "mcq", text: "What is the BCL application status of Metro Courier Services (lead 350115)?", choices: ["Fully Verified with Future Revenue", "Fully Verified with Provisional Limit", "Information Missing", "For Clarification", "Account Ready for Review"],
       answer: function(){ return [L("350115").risk]; } },
-    { type: "mcq", text: "What is the BA application status of Angel's Catering Services (lead 156661)?", choices: ["Approved", "Information Resubmitted", "For Clarification", "Rejected"],
-      answer: function(){ return [L("156661").ba]; } },
-    { type: "mcq", text: "What is the document submission status of the Income Tax Return of Metro Courier Services?", choices: ["Verified", "Not available", "In processing", "Requires resubmission"],
-      answer: function(){ return ["Verified"]; } },
+    { type: "mcq", text: "What is the BCL application status of Davao Highland Coffee (lead 305522)?", choices: ["Fully Verified with Future Revenue", "Fully Verified with Provisional Limit", "Information Missing", "For Clarification", "Account Ready for Review"],
+      answer: function(){ return [L("305522").risk]; } },
+    { type: "mcq", text: "Is Angel's Catering Services (lead 156661) a B2B or a B2C business?", choices: ["B2B", "B2C"],
+      answer: function(){ return [L("156661").seg || "B2B"]; } },
     { type: "input", text: "What is the Regular Limit (credit limit) of the BCL of Metro Courier Services?", placeholder: "Type the amount",
       answer: function(){ return ["100000"]; } },
     { type: "input", text: "What is the BCL Price (interest rate) of the BCL of Metro Courier Services?", placeholder: "Type the rate",

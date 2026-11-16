@@ -126,7 +126,7 @@
     var nav;
     var inter = s.click || s.until;
     if (inter) nav = '<small>' + counter(i) + '</small><span style="display:flex;gap:8px">' + prev + '<button class="btn" id="tskip">Skip this step</button></span>';
-    else if (last) nav = '<small>' + counter(i) + '</small><span style="display:flex;gap:8px">' + prev + '<button class="btn" id="trs">Restart</button>' + (window.ACQUI_STANDALONE ? '' : '<a class="btn" href="../dashboard.html" style="text-decoration:none">Back to Day 5</a><a class="btn dark" href="' + META.nextHref + '" style="text-decoration:none">' + META.nextLabel + '</a>') + '</span>';
+    else if (last) nav = '<small>' + counter(i) + '</small><span style="display:flex;gap:8px">' + prev + '<button class="btn" id="trs">Restart</button>' + (window.ACQUI_STANDALONE ? '' : '<a class="btn" href="../dashboard.html" style="text-decoration:none">' + (META.backLabel || "Back to Day 5") + '</a><a class="btn dark" href="' + META.nextHref + '" style="text-decoration:none">' + META.nextLabel + '</a>') + '</span>';
     else nav = '<small>' + counter(i) + '</small><span style="display:flex;gap:8px">' + (i ? prev : '') + '<button class="btn dark" id="tn">Next</button></span>';
     card.innerHTML = (s.good ? '<div class="good">✓ Good job!</div>' : '') +
       '<div class="who"><div class="av">' + trainer().charAt(0).toUpperCase() + '</div><div><b>' + trainer().replace(/</g, "&lt;") + '</b><small>Your trainer</small></div></div>' +

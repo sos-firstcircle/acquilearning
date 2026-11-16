@@ -16,6 +16,20 @@ const LIBRARY_GROUPS = [
     { label: "Employee expenses reimbursements policy", href: "https://app.notion.com/p/firstcircle/Employee-Expenses-Reimbursements-Policy-d4836ab53ea8439493a3c3adf1e77c6e" },
     { label: "Macbook Basics", href: "lessons/d01-mac-basics.html" }
   ]},
+  { title: "Outbound Prospecting", items: [
+    { label: "ACQ Platform-based Selling: Outbound Prospecting (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Platform-based-Selling-Outbound-Prospecting-1d51a5890448805f85dbefb7ea8e670c" },
+    { label: "Communication Standards and Tone Guide (Notion)", href: "https://app.notion.com/p/firstcircle/Communication-Standards-Tone-Guide-34c1a5890448800492bbfe0f0be693a4" },
+    { label: "Sample prospecting call recording 1", href: "https://drive.google.com/file/d/1Etn1hi9PjyG5qiHI8RoQEn7Jft0N8RD2/view" },
+    { label: "Sample prospecting call recording 2", href: "https://drive.google.com/file/d/1s-Di2naBvmqtXjXAUDyGR61Qli3e0dTh/view" }
+  ]},
+  { title: "Discovery Call", items: [
+    { label: "ACQ Sales Training: Multi-Product Discovery Call / Meeting (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Sales-Training-Multi-Product-Discovery-Call-Meeting-2131a589044880d7b92adb7e64a56961" },
+    { label: "Discovery call pitch deck (Google Slides)", href: "https://docs.google.com/presentation/d/1aEyNDbc8AiiPaNOx96u0NQmo-bPoTtdOJN0bv87wcRA/edit?slide=id.g31bf3e9912e_0_226#slide=id.g31bf3e9912e_0_226" }
+  ]},
+  { title: "Finding Decision Makers", items: [
+    { label: "Prospecting Manual: Online Scraping for Decision Makers / Key Persons (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Prospecting-Manual-Online-Scraping-for-Decision-Makers-Key-Persons-32c1a5890448800b8e84cf5b72c0d42d" },
+    { label: "Apollo / Lusha learning video", href: "https://drive.google.com/file/d/161yMqlzwdXn8Vxl7-i5Ak4gEurBryub4/view" }
+  ]},
   { title: "Connect Notion Links", items: [
     { label: "Add a new team member", href: "https://www.notion.so/firstcircle/Teams-2001a5890448806abaa9c51315a15579" },
     { label: "Add bank accounts (Contacts)", href: "https://www.notion.so/firstcircle/Contact-2001a589044880c08e32ddeca52117b8?pvs=25" },

@@ -1,4 +1,4 @@
-/* Day 9 graded exam 3: Acqui Service onboarding follow-up (30 min). Loaded after app.js + lead-ext.js, before exam.js.
+/* Day 9 graded exam 4: Acqui Service onboarding follow-up (30 min). Loaded after app.js + lead-ext.js, before exam.js.
    Part 5: a lead that needs resubmission and has clarifications from the risk team (documents, Business profile notes, Financial assessment notes, reply to Risk).
    Part 6: an open BCL whose 30 days after the drawdown are over: check it, then log the Transition call with the Transition playbook. No hints. 1 point each. */
 (function(){
@@ -78,7 +78,7 @@
   window.ACQUI_EXAM = {
     graded: true, examId: "exam-acqui-onboarding", minutes: 30, passing: 75, askName: true, backLabel: "Back to Day 9",
     events: ["activity-logged", "contact-added", "note-added", "uw-response"],
-    title: "Acqui Service Exam, Part 3: Document Status and Transition",
+    title: "Acqui Service Exam 4: Document Status and Transition",
     intro: "You will get " + T.length + " situations in two parts: first a lead with documents to resubmit and clarifications from the risk team, then an account ready to be transitioned. Use the Acqui Service simulation behind this box.",
     scoring: "Every question is worth 1 point. Each wrong answer costs 0.25. Questions where you log or send something are graded per part. There are no hints. Questions you did not answer get 0.",
     tasks: T

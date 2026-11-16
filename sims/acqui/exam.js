@@ -134,7 +134,9 @@
   }
   function stopTimer(){ clearInterval(tmId); if (tmEl) { tmEl.remove(); tmEl = null; } }
   function esc(s){ return String(s).replace(/</g, "&lt;"); }
-  function fmtPts(x){ return (Math.round(x * SCALE * 100) / 100).toString(); }
+  var curMult = 1;   /* points of the current question (task.pts, default 1); the engine scores each question as a fraction of 1 */
+  var MAXP = TASKS.reduce(function(a, t){ return a + (t.pts || 1); }, 0);
+  function fmtPts(x){ return (Math.round(x * SCALE * curMult * 100) / 100).toString(); }
   function pointsNow(raw){ return Math.max(0, (raw == null ? 1 : raw) - (hintUsed ? HINT_COST : 0) - loss); }
 
   function intro(){
@@ -143,7 +145,7 @@
       '<p style="font-size:15px;line-height:1.55;margin:8px 0 10px">' + (CFG.intro || ('You will get ' + TASKS.length + ' short situations, one at a time. Use the simulation behind this box to find the answer or the right place. Some questions ask you to type or pick what you find.')) + '</p>' +
       '<p style="font-size:14px;line-height:1.55;margin:0 0 14px;color:#456">' + (CFG.scoring || ('Every question starts with 1 point. A hint costs ' + fmtPts(HINT_COST) + ' point, and each wrong answer costs ' + fmtPts(WRONG_COST) + '.')) + (G ? ' This exam is graded and you get one attempt. You have ' + CFG.minutes + ' minutes: the timer starts when you press Start, and unanswered questions get 0 when time is up. Pass mark ' + PASS + '%.' : ' This is practice, so your score is not recorded as a grade. Aim for ' + PASS + '% or more.') + '</p>' +
       (CFG.askName ? '<div style="background:#f4f8f8;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 14px"><div style="font-size:13px;line-height:1.5;color:#345;margin-bottom:8px"><b>Honor code.</b> I will answer this test on my own. I will not ask anyone for help, and I will not share the questions or answers.</div><label style="font-size:13px;font-weight:700">AM name: <input type="text" id="exname" placeholder="Type your name" autocomplete="off" style="margin-top:4px"></label><div style="font-size:11px;color:var(--mut);margin-top:4px">This is the name you will use in the Acqui Service simulation.</div></div>' : '') +
-      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + ' first</a>') + '</span><button class="btn dark" id="exgo">Start</button></div>';
+      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back to Day 5") + '</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + ' first</a>') + '</span><button class="btn dark" id="exgo">Start</button></div>';
     document.body.appendChild(box);
     document.getElementById("exgo").onclick = function(){
       if (CFG.askName) {
@@ -157,7 +159,7 @@
   function begin(){ n = 0; res = []; started = Date.now(); if (G) startTimer(); TASKS.forEach(function(t){ if (t.reset) t.reset(); }); location.hash = "#/home"; dim.style.display = "none"; show(); }
 
   function show(){
-    flags = {}; hintUsed = false; wrongs = 0; loss = 0; picked = null; state = "asking"; box.className = "";
+    curMult = TASKS[n].pts || 1; flags = {}; hintUsed = false; wrongs = 0; loss = 0; picked = null; state = "asking"; box.className = "";
     var t = TASKS[n];
     if (t.setup) t.setup();
     drawPanel(t.chat);
@@ -253,7 +255,7 @@
   function finishQ(pts, how, why, detail){
     if (state !== "asking") return;
     state = "done";
-    res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), pts: pts, how: how, hint: hintUsed, wrongs: wrongs, why: why || "", detail: detail || "" });
+    res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), mult: curMult, pts: pts * curMult, how: how, hint: hintUsed, wrongs: wrongs, why: why || "", detail: detail || "" });
     var last = n === TASKS.length - 1;
     var note = how === "skipped" ? "Skipped" : how === "wrong" ? why : how === "graded" ? fmtPts(pts) + " / " + SCALE + " points" + (hintUsed || wrongs ? " (" + [hintUsed ? "hint -" + fmtPts(HINT_COST) : "", wrongs ? wrongs + " wrong -" + fmtPts(loss) : ""].filter(Boolean).join(", ") + ")" : "") : fmtPts(pts) + (fmtPts(pts) === "1" ? " point" : " points") + (hintUsed || wrongs ? " (" + [hintUsed ? "hint -" + fmtPts(HINT_COST) : "", wrongs ? wrongs + " wrong -" + fmtPts(loss) : ""].filter(Boolean).join(", ") + ")" : "");
     box.innerHTML = '<div class="bar"><i style="width:' + ((n + 1) / TASKS.length * 100) + '%"></i></div><div class="k">Question ' + (n + 1) + ' of ' + TASKS.length + '</div>' +
@@ -263,22 +265,22 @@
   }
 
   function finish(){
-    state = "idle";
-    var total = res.reduce(function(a, r){ return a + r.pts; }, 0), capped = Math.min(total, TASKS.length), pct = Math.round(capped / TASKS.length * 100), pass = pct >= PASS;
+    state = "idle"; curMult = 1;
+    var total = res.reduce(function(a, r){ return a + r.pts; }, 0), capped = Math.min(total, MAXP), pct = Math.round(capped / MAXP * 100), pass = pct >= PASS;
     var secs = Math.round((Date.now() - started) / 1000);
     box.className = "full"; dim.style.display = "block"; document.body.appendChild(box);
-    box.innerHTML = '<div class="k">' + (G ? 'Exam result' : 'Practice check · result') + '' + (AM_NAME ? ' · ' + esc(AM_NAME) : '') + '</div><div class="big ' + (pass ? "ok" : "no") + '">' + pct + '%</div><div style="font-size:16px;font-weight:600">' + (pass ? "Passed" : G ? "Not passed" : "Not yet. Review the tour and try again.") + ' (' + fmtPts(capped) + ' / ' + (TASKS.length * SCALE) + ' points' + (total > TASKS.length ? ', bonus included, capped at ' + (TASKS.length * SCALE) : '') + ', ' + Math.floor(secs / 60) + 'm ' + (secs % 60) + 's)</div>' +
+    box.innerHTML = '<div class="k">' + (G ? 'Exam result' : 'Practice check · result') + '' + (AM_NAME ? ' · ' + esc(AM_NAME) : '') + '</div><div class="big ' + (pass ? "ok" : "no") + '">' + pct + '%</div><div style="font-size:16px;font-weight:600">' + (pass ? "Passed" : G ? "Not passed" : "Not yet. Review the tour and try again.") + ' (' + fmtPts(capped) + ' / ' + (MAXP * SCALE) + ' points' + (total > MAXP ? ', bonus included, capped at ' + (MAXP * SCALE) : '') + ', ' + Math.floor(secs / 60) + 'm ' + (secs % 60) + 's)</div>' +
       '<table>' + res.map(function(r){
-        var why = r.how === "skipped" ? "skipped" : r.how === "wrong" ? "wrong" : r.how === "graded" ? (r.pts < 1 ? "partly right" : "") : [r.hint ? "hint" : "", r.wrongs ? r.wrongs + " wrong" : ""].filter(Boolean).join(", ");
-        var bad = r.how === "skipped" || r.how === "wrong" || (r.how === "graded" && r.pts < 0.5);
+        var why = r.how === "skipped" ? "skipped" : r.how === "wrong" ? "wrong" : r.how === "graded" ? (r.pts < (r.mult || 1) ? "partly right" : "") : [r.hint ? "hint" : "", r.wrongs ? r.wrongs + " wrong" : ""].filter(Boolean).join(", ");
+        var bad = r.how === "skipped" || r.how === "wrong" || (r.how === "graded" && r.pts < 0.5 * (r.mult || 1));
         return '<tr><td style="width:24px" class="' + (bad ? "no" : "ok") + '">' + (bad ? "✗" : "✓") + '</td><td>' + esc(r.text) + (r.detail ? r.detail : "") + '</td><td style="white-space:nowrap;color:var(--mut)">' + why + '</td><td style="text-align:right"><b>' + fmtPts(r.pts) + '</b></td></tr>'; }).join("") + '</table>' +
-      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">Back to Day 5</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + '</a>') + '</span>' + (G && !(window.LMS && LMS.preview && LMS.preview()) ? '<a class="btn dark" href="../dashboard.html" id="exagain" style="text-decoration:none">Back to dashboard</a>' : '<button class="btn dark" id="exagain">Try again</button>') + '</div>';
+      '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back to Day 5") + '</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + '</a>') + '</span>' + (G && !(window.LMS && LMS.preview && LMS.preview()) ? '<a class="btn dark" href="../dashboard.html" id="exagain" style="text-decoration:none">Back to dashboard</a>' : '<button class="btn dark" id="exagain">Try again</button>') + '</div>';
     if (!G || (window.LMS && LMS.preview && LMS.preview())) document.getElementById("exagain").onclick = intro;
     stopTimer();
-    if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: TASKS.length, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return [r.text, r.pts, r.how]; }) }) }); } catch (err) {} }
+    if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: MAXP, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return [r.text, r.pts, r.how]; }) }) }); } catch (err) {} }
     else try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
     /* If this ever becomes graded: LMS.saveResult({ id:"d5-nav-check", label:"Acqui navigation check", score:total, max:TASKS.length, pct:pct, kind:"lms", passing:PASS }) */
-    window.ACQUI_EXAM_RESULT = { name: AM_NAME, score: capped, max: TASKS.length, pct: pct, passed: pass, seconds: secs, tasks: res };
+    window.ACQUI_EXAM_RESULT = { name: AM_NAME, score: capped, max: MAXP, pct: pct, passed: pass, seconds: secs, tasks: res };
   }
 
   /* a graded answer: r.items = [{label, w, ok}] (the weights add up to 1), r.bonus = same, r.extra = [{label, loss}], r.factor = multiplier (e.g. 0.5) */
