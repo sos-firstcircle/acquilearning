@@ -18,7 +18,7 @@ LMS_DAY_DEFS[9] = {
   // Pages: sims/acqui-exam-day9.html; scripts sims/acqui/exam-nav.js, exam-leads.js, exam-day9.js; extra screens sims/acqui/lead-ext.js.
   // Built but NOT listed: sims/acqui-exam-activities.html (log a call + meeting) and sims/acqui-exam-onboarding.html (document status + transition).
   exams: [
-    { id: "exam-acqui-day9", label: "Acqui Service Exam: Navigation, General Information and Leads", href: "sims/acqui-exam-day9.html", minutes: 45, kind: "lms", passing: 75, soon: true, blocks: true, lockBtn: true, desc: "Opens this afternoon." }   // soon+blocks: shows as "Soon" and still keeps Day 9 open. Delete both to release the exam (afternoon of Nov 19)
+    { id: "exam-acqui-day9", label: "Acqui Service Exam: Navigation, General Information and Leads", href: "sims/acqui-exam-day9.html", minutes: 45, kind: "lms", passing: 75, soon: true, blocks: true, lockBtn: true, adminOpen: true, desc: "Opens this afternoon." }   // soon+blocks: shows as "Soon" and still keeps Day 9 open. Delete both to release the exam (afternoon of Nov 19)
   ],
   materials: [
     { label: "Outbound Prospecting (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Platform-based-Selling-Outbound-Prospecting-1d51a5890448805f85dbefb7ea8e670c", link: true },
