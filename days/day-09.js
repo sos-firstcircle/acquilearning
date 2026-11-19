@@ -1,8 +1,6 @@
 /* Day 9. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[9] = {
   opens: { "110926": "2026-11-19" },   // batch 110926: stays locked until this date (Manila time), even if Day 8 is done
-  // hold: the day shows this lock message for the batch until this line is deleted (the trainer asks for the unlock). Remove the whole line to open the day.
-  hold: { "110926": "Session Locked. Please review your Acqui Service Demos for the graded exam this afternoon." },
   title: "Role-Play Assessment",
   titles: { "110926": "Acqui Service Training" },   // batch 110926 sees this day name instead of title
   brief: "Nov 19\n• Review the other Acqui Service functions at your own pace\n• Guided demos and practice: log a call, log a meeting\n• Graded Acqui Service exam",
@@ -20,7 +18,7 @@ LMS_DAY_DEFS[9] = {
   // Pages: sims/acqui-exam-day9.html; scripts sims/acqui/exam-nav.js, exam-leads.js, exam-day9.js; extra screens sims/acqui/lead-ext.js.
   // Built but NOT listed: sims/acqui-exam-activities.html (log a call + meeting) and sims/acqui-exam-onboarding.html (document status + transition).
   exams: [
-    { id: "exam-acqui-day9", label: "Acqui Service Exam: Navigation, General Information and Leads", href: "sims/acqui-exam-day9.html", minutes: 45, kind: "lms", passing: 75 }
+    { id: "exam-acqui-day9", label: "Acqui Service Exam: Navigation, General Information and Leads", href: "sims/acqui-exam-day9.html", minutes: 45, kind: "lms", passing: 75, soon: true, blocks: true, lockBtn: true, desc: "Opens this afternoon." }   // soon+blocks: shows as "Soon" and still keeps Day 9 open. Delete both to release the exam (afternoon of Nov 19)
   ],
   materials: [
     { label: "Outbound Prospecting (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Platform-based-Selling-Outbound-Prospecting-1d51a5890448805f85dbefb7ea8e670c", link: true },
