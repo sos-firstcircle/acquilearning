@@ -74,6 +74,9 @@ const PROGRESS_SHEET = "Progress";  // one row per completed task/lesson
 const GRADES_HEADER = ["Timestamp", "Email", "Name", "Batch", "Exam ID", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Items"];   // Items = per-question answers (JSON) for the Grades page charts
 const PROGRESS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Item ID"];
 // Exams that also get their own tab (in addition to the Grades row). Exam ID -> tab name.
+// Manual grades (trainer-graded call simulations etc.): their own tab. Admins see all (adminData); each person sees only their own (myGrades). Not counted as exams in myProgress.
+const MANUAL_SHEET = "Manual";
+const MANUAL_HEADER = ["Timestamp", "Email", "Name", "Batch", "Rubric ID", "Overall", "Graded by", "Details", "Items"];
 const EXAM_TABS = { "d1-exam-responsible-selling": "D1-1", "d4-exam-connect-sim": "D4-1" };
 // Site settings (e.g. the trainer name that narrates the Acqui Service tour). One row per setting; admins change them on the Settings page.
 const SETTINGS_SHEET = "Settings";
@@ -169,12 +172,26 @@ function doPost(e) {
       return json_({ ok: true, done: Object.keys(done).filter(function (id) { return !results[id]; }), results: results, me: me_(user) });
     }
     if (req.action === "myGrades") {
-      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(function (r) { return String(r.Email).toLowerCase() === user.email; }).map(function (r) { delete r.Items; return r; }) });
+      const mine = function (r) { return String(r.Email).toLowerCase() === user.email; };
+      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }),
+        manual: readRows_(MANUAL_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }) });   // their own trainer-graded results only
     }
     if (req.action === "adminData") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
-      return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET) });
+      return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET), manual: readRows_(MANUAL_SHEET) });
+    }
+    if (req.action === "saveManual") {     // admins: one manual grade (rubric) for one person. A new row each time; the Grades page shows the latest per person and rubric.
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
+      const em = String(p.email || "").toLowerCase().trim(), rid = String(p.id || "").trim();
+      if (!/^[^@\s]+@firstcircle\.com$/.test(em) || !/^manual-[a-z0-9-]{1,60}$/.test(rid)) throw new Error("bad-input");
+      const txt = String(p.items || ""), items = /^\{[\s\S]*\}$/.test(txt) && txt.length <= 45000 ? txt : "";
+      const safe = function (v, n) { v = String(v == null ? "" : v).slice(0, n); return /^[=+\-@]/.test(v) ? "'" + v : v; };   // keep text from being read as a formula
+      const b = String(p.batch || "").replace(/[^0-9]/g, "").slice(0, 6);
+      appendByHeader_(sheet_(MANUAL_SHEET, MANUAL_HEADER), { "Timestamp": new Date(), "Email": em, "Name": safe(p.name, 100), "Batch": b ? "'" + b : "", "Rubric ID": rid,
+        "Overall": safe(p.overall, 20), "Graded by": user.email, "Details": safe(p.details, 5000), "Items": items });
+      return json_({ ok: true });
     }
     if (req.action === "setDetails") {     // admins: rewrite the Details (notes) cell of existing Grades rows for one batch. Nothing else in the row is touched.
       if (!isAdmin_(user.email)) throw new Error("not-admin");
