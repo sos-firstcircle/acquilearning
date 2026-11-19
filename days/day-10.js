@@ -1,6 +1,5 @@
 /* Day 10. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[10] = {
-  opens: { "110926": "2026-11-20" },   // batch 110926: stays locked until this date (Manila time), even if Day 9 is done
   title: "TL Pitch Deck Simulation",
   titles: { "110926": "Prospecting Call Simulation" },   // batch 110926 sees this day name instead of title
   sessions: ["s-d7-discussion", "s-d7-sim"],   // Nov 20 sessions (Day 7 titles, held on the Day 10 date for batch 110926); ids from LMS_SESSIONS in modules.js
