@@ -74,6 +74,9 @@ let DATA = { grades:[], progress:[] };
 /* Exams with a question file: used for the per-question chart. Exam id -> [questions file, global name]. */
 const BANKS = { "d3-exam-product-knowledge-1": ["exams/product-knowledge-1-questions.js", "LMS_PK1"], "exam-product-knowledge-2": ["exams/product-knowledge-2-questions.js", "LMS_PK2"], "exam-product-knowledge-3": ["exams/product-knowledge-3-questions.js", "LMS_PK3"] };
 const SIM_ID = "d4-exam-connect-sim";
+/* Exams hidden on this page for now (built but not on any day; only test attempts). Rows stay in the Sheet. Remove an id to show it again. */
+const HIDDEN = ["exam-acqui-activities", "exam-acqui-onboarding"];
+const shown = r => !String(r["Exam ID"]).startsWith("TEST-") && !HIDDEN.includes(String(r["Exam ID"]));
 /* One pass mark for every exam (HR / Sales Ops). Pass or fail is worked out here from the percent, so older rows saved under the 80% rule
    show correctly without changing the Sheet. The Connect sim still cannot be passed with a critical error. */
 const MARK = 75, SIMS = [SIM_ID, "exam-connect-sim"];
@@ -151,7 +154,7 @@ async function load(passcode){
 function render(){
   const bn = v => (v === "" || v == null) ? "" : String(v).padStart(6, "0");   // Sheets may drop leading zeros
   [].concat(DATA.grades || [], DATA.progress || []).forEach(r => { const e = String(r.Email || "").toLowerCase(); if (/\+[^@]*@/.test(e) && r.Name) CODED[e] = String(r.Name); });
-  const g = DATA.grades.filter(r => !String(r["Exam ID"]).startsWith("TEST-")).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
+  const g = DATA.grades.filter(shown).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
   const bOf = e => LMS.batchOf(e) || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());
   const allLearners = [...new Set([ ...R.learners.map(e=>e.toLowerCase()), ...g.map(r=>r.Email) ])].filter(e => !admins.includes(e));
@@ -324,7 +327,7 @@ async function loadMine(){
 /* Honor-code name saved at the start of Details ("Honor code: NAME | ..."). Learners only see this part, never the score notes. */
 const honorOf = r => { const m = /^Honor code: (.*?)(?: \| |$)/.exec(String(r.Details || "")); return m ? "Taken by: " + m[1] : ""; };
 function drawMine(grades, note, retry){
-  const rows = grades.filter(r => !String(r["Exam ID"]).startsWith("TEST-")).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
+  const rows = grades.filter(shown).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
   const best = {}; rows.forEach(r => { const p = pct(r); if (best[r["Exam ID"]] == null || (p != null && p > best[r["Exam ID"]].p)) best[r["Exam ID"]] = { ...r, p }; });
   const exams = Object.values(best);
   $("app").innerHTML = `<h1>My grades</h1><p class="muted">Your results for the graded exams. The best score counts.${note ? ` <span class="small">${esc(note)}</span>${retry ? ' <a href="#" id="retryMine">Try again</a>' : ""}` : ""}</p>
