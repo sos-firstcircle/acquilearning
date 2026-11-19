@@ -102,7 +102,7 @@
   window.ACQUI_EXAM = {
     graded: true, examId: "exam-acqui-activities-2", minutes: 30, passing: 75, askName: true, backLabel: "Back to Day 10",
     events: ["activity-logged", "contact-added", "note-added"],
-    title: "Acqui Service Exam 3 (Part 2): Prospecting, Discovery and Transition Calls",
+    title: "Acqui Service Exam (Part 2): Log Calls and Meetings",
     intro: "You will get " + T.length + " situations about one lead, Villanueva Hardware Trading: a prospecting call, a discovery call, and later, after the BCL is opened and used, a transition call. Read the messages on the right, then do it in Acqui Service. Open the lead from the Lead List or search it.",
     scoring: "Every question is worth 1 point. Each wrong answer costs 0.25. Questions where you log something are graded per part (type, outcome, contact, playbook answers...). There are no hints. Questions you did not answer get 0.",
     tasks: T

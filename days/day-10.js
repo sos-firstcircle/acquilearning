@@ -10,7 +10,7 @@ LMS_DAY_DEFS[10] = {
   ],
   // Graded exam: Acqui Service Exam 3 part 2. One lead's story: Prospecting call, Discovery call (playbook), time skip, Transition call. Script: sims/acqui/exam-activities2.js
   exams: [
-    { id: "exam-acqui-activities-2", label: "Acqui Service Exam 3 (Part 2): Prospecting, Discovery and Transition Calls", href: "sims/acqui-exam-activities-2.html", minutes: 30, kind: "lms", passing: 75 }
+    { id: "exam-acqui-activities-2", label: "Acqui Service Exam (Part 2): Log Calls and Meetings", href: "sims/acqui-exam-activities-2.html", minutes: 30, kind: "lms", passing: 75 }
   ],
   materialsTitle: "Learning Materials",
   materials: [
