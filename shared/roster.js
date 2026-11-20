@@ -22,9 +22,7 @@ window.LMS_ROSTER = {
   // Onboardees grouped by batch. Batch number = start date as MMDDYY (e.g. 101926 = Oct 19, 2026).
   batches: {
     "000000": [   // test batch: no retake
-      "test1@firstcircle.com",
-      "test2@firstcircle.com",
-      "test3@firstcircle.com"
+      // test1-3 removed; add a real test email here
     ],
     "000001": [   // test batch: can retake exams
       "hanna.test@firstcircle.com"

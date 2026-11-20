@@ -22,7 +22,7 @@
   .demo input{flex:1;min-width:0;padding:10px 12px;border:1px solid #C9D6D8;border-radius:var(--r);font:inherit;font-size:14px}
   .demo button{padding:10px 16px;border:0;border-radius:var(--r);background:var(--teal);color:#fff;font-weight:600;font-size:14px}
   .demo button:hover{background:var(--teal-dark)}
-  .gbtn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:300px;padding:11px 18px;border:1px solid #C9D6D8;border-radius:999px;background:#fff;color:#1f1f1f;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+  .gbtn{display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;max-width:300px;padding:11px 18px;border:1px solid #C9D6D8;border-radius:999px;background:#fff;color:#1f1f1f;font:inherit;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none}
   .gbtn:hover{background:var(--mist)}
   .load{position:fixed;inset:0;background:rgba(255,255,255,.92);display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:var(--ink-2);font-size:14px;z-index:10}
   .load.show{display:flex}
@@ -82,8 +82,37 @@ if (alreadyIn) {
   $("switchAcc").onclick = e => { e.preventDefault(); try { localStorage.removeItem("amacademy.user"); sessionStorage.removeItem("amacademy.idtoken"); } catch(err){} location.reload(); };
 }
 
-if (alreadyIn) {
+// Back from the Google sign-in page (Apps Script, "Anyone within First Circle") with a pass: #g=...
+let googleCode = false;   // true while the shared login's FC token step follows a Google sign-in
+const gpass = (location.hash.match(/^#g=([\w.-]+)$/) || [])[1];
+if (gpass) {
+  history.replaceState(null, "", location.pathname + location.search);   // keep the pass out of the address bar
+  $("load").classList.add("show");
+  LMS.signInWithGooglePass(gpass).then(r => {
+    if (!r.needCode) return done();
+    $("load").classList.remove("show"); googleCode = true;
+    $("demoEmail").value = r.email; $("demo").hidden = true; $("codeBox").hidden = false; $("codeInput").value = ""; $("codeInput").focus();
+  }).catch(err => {
+    $("load").classList.remove("show");
+    const m = err && err.message;
+    showError(m === "removed" ? "Your access has been removed. Please contact Salesops."
+      : m === "backend" ? "Couldn't finish signing in right now. Please try again in a moment."
+      : /^login-/.test(String(m)) ? "Google sign-in expired. Please sign in again."
+      : "This Google account isn't on the Learning Hub list. Please contact Salesops.");
+  });
+}
+
+if (alreadyIn && !gpass) {
   // nothing else to set up: the Continue / switch buttons above handle it
+} else if (C.loginUrl && !C.demo) {
+  // Real Google sign-in: open the Apps Script login page; it sends people back here with #g=<pass>.
+  const back = location.href.split("#")[0].split("?")[0].replace(/[^/]*$/, "");
+  $("gbtn").innerHTML = `<a class="gbtn" id="greal" href="${C.loginUrl}?login=1&r=${encodeURIComponent(back)}">${GOOGLE_G}Sign in with Google</a>`;
+  if (C.emailLogin && /[?&]email=1\b/.test(location.search)) {   // typed email: only for test accounts (index.html?email=1)
+    $("gbtn").insertAdjacentHTML("afterend", '<p style="margin:14px 0 0;font-size:13px"><a href="#" id="useEmail">Sign in with email instead</a></p>');
+    $("useEmail").onclick = e => { e.preventDefault(); $("demo").hidden = false; $("demoEmail").focus(); };
+  }
+  setupEmailForms();
 } else if (C.demo || C.emailLogin || !C.googleClientId) {
   // Google sign-in isn't connected yet: the button leads to the email step.
   $("gbtn").innerHTML = `<button class="gbtn" id="gfake" type="button">${GOOGLE_G}Sign in with Google</button>`;
@@ -99,6 +128,23 @@ if (alreadyIn) {
       $("demo").hidden = false; $("demoEmail").focus();
     }, 1000);
   };
+  setupEmailForms();
+} else {
+  const s = document.createElement("script");
+  s.src = "https://accounts.google.com/gsi/client"; s.async = true;
+  s.onload = () => {
+    google.accounts.id.initialize({
+      client_id: C.googleClientId,
+      hd: C.allowedDomain,                                   // hint only: Google shows just this domain's accounts
+      callback: r => LMS.signInWithGoogle(r.credential).then(done).catch(fail)
+    });
+    google.accounts.id.renderButton($("gbtn"), { theme:"outline", size:"large", text:"signin_with", shape:"pill" });
+  };
+  document.head.appendChild(s);
+}
+
+// The typed-email box and the FC token step (shared login).
+function setupEmailForms(){
   $("demoForm").onsubmit = e => {
     e.preventDefault(); $("err").classList.remove("show");
     try { LMS.signInDemo($("demoEmail").value.trim()); done(); }
@@ -117,29 +163,19 @@ if (alreadyIn) {
       else fail(); }
   };
   // Shared-login batches: second step, the personal access code (checked by the Sheet).
-  $("codeBack").onclick = e => { e.preventDefault(); $("err").classList.remove("show"); $("codeBox").hidden = true; $("demo").hidden = false; $("demoEmail").focus(); };
+  $("codeBack").onclick = e => { e.preventDefault(); $("err").classList.remove("show"); $("codeBox").hidden = true;
+    if (googleCode) { googleCode = false; try { localStorage.removeItem("amacademy.gtoken"); } catch(x){} return; }   // Google sign-in: start over with the button
+    $("demo").hidden = false; $("demoEmail").focus(); };
   $("codeForm").onsubmit = e => {
     e.preventDefault(); $("err").classList.remove("show");
     const b = $("codeBtn"); b.disabled = true; b.textContent = "Checking…";
-    LMS.signInWithCode($("demoEmail").value.trim(), $("codeInput").value).then(done).catch(err => {
+    LMS.signInWithCode($("demoEmail").value.trim(), $("codeInput").value, googleCode).then(done).catch(err => {
       b.disabled = false; b.textContent = "Continue";
       showError(err && err.message === "code-inactive" ? "This FC token is no longer active. Please contact Salesops."
         : err && err.message === "code-invalid" ? "That FC token isn't recognised. Run /mytoken in Slack again and check it."
         : "Couldn't check your token right now. Please try again in a moment.");
     });
   };
-} else {
-  const s = document.createElement("script");
-  s.src = "https://accounts.google.com/gsi/client"; s.async = true;
-  s.onload = () => {
-    google.accounts.id.initialize({
-      client_id: C.googleClientId,
-      hd: C.allowedDomain,                                   // hint only: Google shows just this domain's accounts
-      callback: r => LMS.signInWithGoogle(r.credential).then(done).catch(fail)
-    });
-    google.accounts.id.renderButton($("gbtn"), { theme:"outline", size:"large", text:"signin_with", shape:"pill" });
-  };
-  document.head.appendChild(s);
 }
 </script>
 </body>

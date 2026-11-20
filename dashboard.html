@@ -461,7 +461,8 @@ function advance(){
 }
 
 window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
-if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); LMS.syncRsvps().then(changed => { if (changed && !Object.values(rsvpOpen).some(Boolean)) render(); }); }
+if (LMS.deptOnly()) location.replace("department.html");   // no batch, no General: Department only
+else if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); LMS.syncRsvps().then(changed => { if (changed && !Object.values(rsvpOpen).some(Boolean)) render(); }); }
 </script>
 </body>
 </html>

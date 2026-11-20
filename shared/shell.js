@@ -33,7 +33,7 @@ function renderSide(active){
       ${link("chatbot.html","chat","Chatbot (pilot)","chatbot")}
       <li class="nav-label">Trainers</li>
       ${link("grades.html","grades","Grades","grades")}${link("sessions.html","cal","Sessions","sessions")}${link("activities.html","exam","Activities","activities")}${link("settings.html","admin","Settings","settings")}` : `
-      ${LMS.isExisting() ? `
+      ${LMS.deptOnly() ? link("department.html","session","Department","department") : LMS.isExisting() ? `
       ${link("dashboard.html","exam","Simulations","dashboard")}
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}

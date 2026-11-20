@@ -15,10 +15,7 @@ const ALLOWED_DOMAIN = "firstcircle.com";
 // "google" = verify the Google sign-in token (use once the OAuth client ID exists).
 const AUTH_MODE = "email";
 const BATCHES = {                 // batch number (start date, MMDDYY) -> onboardee emails. Keep in sync with shared/roster.js
-  "000000": [                     // test batch: no retake
-    "test1@firstcircle.com",
-    "test2@firstcircle.com",
-    "test3@firstcircle.com"
+  "000000": [                     // test batch: no retake (test1-3 removed; add a real test email here)
   ],
   "000001": [                     // test batch: can retake exams
     "hanna.test@firstcircle.com"
@@ -26,19 +23,7 @@ const BATCHES = {                 // batch number (start date, MMDDYY) -> onboar
   "000002": [                   // existing AMs: simulations and practice only; can retake
     "acquisitiongroup@firstcircle.com"
   ],
-  "110926": [   // first real onboarding batch: starts Nov 9, 2026 (standard 10-day path, one attempt per exam)
-      "benedict.oyek@firstcircle.com",
-      "alexander.painaga@firstcircle.com",
-      "renell.gatchalian@firstcircle.com",
-      "raymund.estebar@firstcircle.com",
-      "ralph.aniciete@firstcircle.com",
-      "melissa.ligeralde@firstcircle.com",
-      "jazon.pulmano@firstcircle.com",
-      "hyasmin.lascano@firstcircle.com",
-      "leslie.reyes@firstcircle.com",
-      "jeremiah.veloria@firstcircle.com",
-      "alyssa.moncada@firstcircle.com"
-  ]
+  // 110926 (Nov 9 batch) now comes from the People tab (Batch column), so the Settings switch peopleLogin must be "on".
 };
 
 // Who may open the Grades page (admins are allowed in automatically). Optional extra passcode: leave "" for none.
@@ -106,7 +91,7 @@ const CHAT_SYSTEM = "You are Acqui, the assistant for First Circle's Acquisition
 function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
-    const user = AUTH_MODE === "email" ? checkEmail_(req) : verifyToken_(req.token);   // throws if not allowed
+    const user = userFromRequest_(req);   // throws if not allowed
     const p = req.payload || {};
 
     if (req.action === "verify") return json_({ ok: true, email: user.email });
@@ -254,7 +239,7 @@ function doPost(e) {
       appendByHeader_(sh, { "Key": key, "Value": val, "Updated": new Date(), "By": user.email });
       return json_({ ok: true });
     }
-    if (req.action === "whoami") return json_({ ok: true, me: me_(user) });
+    if (req.action === "whoami") return json_({ ok: true, me: me_(user), email: user.email, name: user.name, batch: user.batch || "", google: !!req.gtoken });
     if (req.action === "directory") {           // any signed-in person: the org chart (names, roles, teams only; no emails)
       const ppl = people_();
       return json_({ ok: true, people: Object.keys(ppl).map(function (e) { return ppl[e]; }).filter(function (r) { return r.active; }).map(function (r) { return { name: r.name, role: r.role, team: r.team, batch: r.batch, order: r.order }; }),
@@ -366,7 +351,9 @@ function doPost(e) {
     }
     return json_({ ok: false, error: "unknown-action" });
   } catch (err) {
-    return json_({ ok: false, error: String(err.message || err) });
+    const out = { ok: false, error: String(err.message || err) };
+    if (out.error === "code-required") { try { out.email = readPass_(JSON.parse(e.postData.contents).gtoken); } catch (x) {} }   // Google sign-in on the shared login: the hub asks for the FC token next
+    return json_(out);
   }
 }
 
@@ -415,6 +402,66 @@ function chatNotes_() {
 }
 
 /** Temporary mode: accept an email that is on the allow list. */
+/* ---------- Google sign-in (no Cloud project needed) ----------
+   A second deployment of this same script, set to "Anyone within First Circle", makes Google sign the person in
+   before doGet runs, so Session.getActiveUser() is their real email. doGet hands back a signed pass
+   (email + expiry, HMAC with LOGIN_SECRET from Script Properties); the hub sends it with every request. */
+const LOGIN_DAYS = 30;
+const LOGIN_RETURN = ["https://sos-firstcircle.github.io/acquilearning/", "http://localhost:8000/"];   // where the pass may be sent back to
+const EMAIL_LOGIN_ALWAYS = ["hanna.test@firstcircle.com"];   // typed-email sign-in still works for these (test accounts without a Google login)
+
+function loginSecret_() { const k = PropertiesService.getScriptProperties().getProperty("LOGIN_SECRET"); if (!k || k.length < 32) throw new Error("no-login-secret"); return k; }
+function b64_(bytes) { return Utilities.base64EncodeWebSafe(bytes).replace(/=+$/, ""); }
+function makePass_(email) {
+  const body = b64_(Utilities.newBlob(JSON.stringify({ e: email, x: Date.now() + LOGIN_DAYS * 864e5 })).getBytes());
+  return body + "." + b64_(Utilities.computeHmacSha256Signature(body, loginSecret_()));
+}
+function readPass_(pass) {
+  const parts = String(pass || "").split(".");
+  if (parts.length !== 2) throw new Error("login-invalid");
+  if (b64_(Utilities.computeHmacSha256Signature(parts[0], loginSecret_())) !== parts[1]) throw new Error("login-invalid");
+  const pad = parts[0] + "===".slice((parts[0].length + 3) % 4);
+  const t = JSON.parse(Utilities.newBlob(Utilities.base64DecodeWebSafe(pad)).getDataAsString());
+  if (!t.e || !(t.x > Date.now())) throw new Error("login-expired");
+  return String(t.e).toLowerCase();
+}
+
+/** Who is asking: a Google pass if there is one, otherwise the typed email (while emailLogin is on). */
+function userFromRequest_(req) {
+  if (req.gtoken) return checkEmail_({ email: readPass_(req.gtoken), name: req.name, google: true });   // Google sign-in: no FC token needed
+  const typed = String(req.email || "").trim().toLowerCase().replace(/\+[^@]*@/, "@");
+  if (setting_("emailLogin") !== "on" && EMAIL_LOGIN_ALWAYS.indexOf(typed) === -1) throw new Error("login-required");   // typed email is off (Google only); Settings key emailLogin = "on" brings it back
+  return checkEmail_(req);
+}
+
+/** The Google sign-in page (opened from the hub's "Sign in with Google" button, on the "Anyone within First Circle" deployment). */
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  const back = LOGIN_RETURN.filter(function (u) { return String(p.r || "").indexOf(u) === 0; })[0] || LOGIN_RETURN[0];
+  const esc = function (t) { return String(t).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  const page = function (title, msg, href, label) {
+    return HtmlService.createHtmlOutput('<div style="font-family:Arial,sans-serif;max-width:420px;margin:60px auto;padding:0 16px;text-align:center;color:#12343B">' +
+      '<h2 style="margin:0 0 10px">' + esc(title) + '</h2><p style="color:#4a6266;line-height:1.5">' + msg + '</p>' +
+      '<p style="margin-top:24px"><a id="go" href="' + esc(href) + '" target="_top" style="display:inline-block;background:#2BB3A8;color:#fff;padding:12px 22px;border-radius:999px;text-decoration:none;font-weight:bold">' + esc(label) + '</a></p></div>' +
+      (href.indexOf("#g=") > -1 ? '<script>try{window.top.location.replace(' + JSON.stringify(href) + ')}catch(x){}</script>' : ''))
+      .setTitle("Acquisition Learning Hub").addMetaTag("viewport", "width=device-width, initial-scale=1");
+  };
+  if (!p.login) return page("Acquisition Learning Hub", "Open the hub to sign in.", back + "index.html", "Go to the Learning Hub");
+  const email = String(Session.getActiveUser().getEmail() || "").toLowerCase();
+  if (!email) return page("Couldn't read your Google account", "Sign in with your First Circle Google account. If you're signed in to several Google accounts, try a Chrome profile or an incognito window with only your work account.", back + "index.html", "Back to sign-in");
+  try { checkEmail_({ email: email, name: email, google: true }); }
+  catch (err) {
+    const m = String(err && err.message);
+    if (m !== "code-required") {   // shared login: allowed, the hub asks for the FC token next
+      return page("Not on the list", esc(email) + (m === "removed" ? " no longer has access." : " isn't on the Learning Hub list.") + " Please contact Salesops.", back + "index.html", "Back to sign-in");
+    }
+  }
+  let pass;
+  try { pass = makePass_(email); } catch (err) { return page("Sign-in isn't set up yet", "Please contact Salesops (LOGIN_SECRET missing).", back + "index.html", "Back to sign-in"); }
+  try { appendByHeader_(sheet_(LOGINS_SHEET, LOGINS_HEADER), { "Timestamp": new Date(), "Name": "Google sign-in", "Token": "", "Email": email }); } catch (x) {}
+  return page("Signed in", "Signed in as <b>" + esc(email) + "</b>.", back + "index.html#g=" + pass, "Continue to the Learning Hub");
+}
+
 function checkEmail_(req) {
   let email = String(req.email || "").trim().toLowerCase();
   const plain = email.replace(/\+[^@]*@/, "@");                        // a coded person arrives as shared+<id>@...
@@ -431,7 +478,7 @@ function checkEmail_(req) {
     }
   }
   if (!batch && ADMIN_EMAILS.indexOf(email) === -1) throw new Error("not-on-list");
-  if (CODE_BATCHES.indexOf(batch) !== -1) {
+  if (CODE_BATCHES.indexOf(batch) !== -1 && !req.google) {   // FC tokens: typed-email sign-in only (Google already proved who it is)
     const codes = codes_();
     if (codes) {                                                        // codes are switched on (the Codes tab has rows)
       const c = String(req.code || "").trim().toUpperCase();

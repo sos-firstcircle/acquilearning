@@ -25,6 +25,7 @@ window.LMS_CONFIG = {
 
   googleClientId: "",                 // from Google Cloud (step 4 of the build)
   allowedDomain: "firstcircle.com",    // only these Google accounts can sign in
+  loginUrl: "https://script.google.com/a/macros/firstcircle.com/s/AKfycbyiim2vlCwpd14ZNEMcwSjyiT9M7K8aENdRfQbYEu6aEEymHFDBeHXPUIITTva2eQEy4g/exec",                       // Google sign-in: the Apps Script deployment set to "Anyone within First Circle" (empty = button falls back to the email box)
   backendUrl: "https://script.google.com/macros/s/AKfycbxwD5hJK3xUM2YhMggINVN9j6n__9nFzdE1XM_U8yt3wq2DxJJa68NTtCW4oZpLJqZ0hA/exec",                     // Apps Script web app URL (step 4)
   // Catch-up: onboardees in these batches get a "Mark day done" button on the listed days
   // (for people who did those days before this site existed). Delete a line to turn it off.
@@ -56,6 +57,7 @@ window.LMS_CONFIG = {
     if (C.demo) return read("user", null) || { ...C.demoUser };
     return read("user", null);          // set by index.html after Google sign-in
   }
+  function dropPass(){ try { localStorage.removeItem(`${KEY}.gtoken`); } catch(e){} }
   function storedUser(){ return read("user", null); }
   /* Read lazily: roster.js loads just after this file. Returns { admins, learners, batches }. */
   const roster = () => { const r = window.LMS_ROSTER || {}, batches = r.batches || {};
@@ -94,12 +96,12 @@ window.LMS_CONFIG = {
   function send(action, payload, opts){
     if (C.demo || !C.backendUrl) return Promise.resolve(null);
     opts = opts || {};
-    const body = () => { let token = ""; try { token = sessionStorage.getItem(`${KEY}.idtoken`) || ""; } catch(e){}
+    const body = () => { let token = "", gtoken = ""; try { token = sessionStorage.getItem(`${KEY}.idtoken`) || ""; gtoken = localStorage.getItem(`${KEY}.gtoken`) || ""; } catch(e){}
       const u = (opts.as || currentUser() || {});
-      return JSON.stringify({ action, token, payload, email: u.email, name: u.name, code: u.code || "" }); };   // email/name are used only in the temporary email-list mode
+      return JSON.stringify({ action, token, gtoken, payload, email: u.email, name: u.name, code: u.code || "" }); };   // gtoken = Google sign-in pass (the backend trusts its email over the typed one)   // email/name are used only in the temporary email-list mode
     const once = ms => { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
       return fetch(C.backendUrl, { method:"POST", headers:{ "Content-Type":"text/plain;charset=utf-8" }, body: body(), signal: ctl.signal, keepalive: true })   // text/plain avoids a CORS preflight, which Apps Script can't answer
-        .then(r => r.json()).then(j => { clearTimeout(t); if (j && !j.ok && (/^code-/.test(String(j.error)) || j.error === "removed") && !opts.as) codeKick(j.error); return j; }).catch(() => { clearTimeout(t); return null; }); };
+        .then(r => r.json()).then(j => { clearTimeout(t); if (j && !j.ok && (/^code-/.test(String(j.error)) || /^login-/.test(String(j.error)) || j.error === "removed") && !opts.as) codeKick(j.error); return j; }).catch(() => { clearTimeout(t); return null; }); };
     if (!opts.retry) return once(opts.timeout || 30000);
     return new Promise(resolve => {
       let finished = false, failed = 0; const delays = [0, 6000, 14000];
@@ -114,8 +116,8 @@ window.LMS_CONFIG = {
   let kicked = false;
   function codeKick(err){
     if (kicked) return; kicked = true;
-    try { sessionStorage.setItem(`${KEY}.flash`, err === "removed" ? "Your access has been removed. Please contact Salesops." : err === "code-inactive" ? "Your FC token is no longer active. Please contact Salesops." : "Please sign in again with your FC token.");
-      localStorage.removeItem(`${KEY}.user`); } catch(e){}
+    try { sessionStorage.setItem(`${KEY}.flash`, err === "removed" ? "Your access has been removed. Please contact Salesops." : /^login-/.test(String(err)) ? "Please sign in again with Google." : err === "code-inactive" ? "Your FC token is no longer active. Please contact Salesops." : "Please sign in again with your FC token.");
+      localStorage.removeItem(`${KEY}.user`); localStorage.removeItem(`${KEY}.gtoken`); } catch(e){}
     location.href = (location.pathname.includes("/lessons/") || location.pathname.includes("/sims/") || location.pathname.includes("/exams/")) ? "../index.html" : "index.html";
   }
 
@@ -155,7 +157,7 @@ window.LMS_CONFIG = {
   function adminGate(){
     try {
       const u = currentUser();
-      if (!u || C.demo || !window.LMS.isAdmin()) return;
+      if (!u || C.demo || u.google || !window.LMS.isAdmin()) return;   // signed in with Google: no trainer password (typed-email admins still get it)
       if (sessionStorage.getItem(`${KEY}.adminok`) === u.email.toLowerCase()) return;
       const box = document.createElement("div");
       box.style.cssText = "position:fixed;inset:0;z-index:99999;background:#0F2A2E;display:flex;align-items:center;justify-content:center;font-family:system-ui,sans-serif";
@@ -224,9 +226,28 @@ window.LMS_CONFIG = {
       write("user", { name: claims.name || claims.email, email: claims.email.toLowerCase(), picture: claims.picture || "", startDate: C.demoUser.startDate });
     },
 
+    /** Back from the Google sign-in page with a pass (index.html#g=...). Asks the backend who this is.
+        Resolves { needCode, email } (shared login: ask for the FC token next) or signs them in. Rejects with "not-on-list", "removed", "login-..." or "backend". */
+    signInWithGooglePass(pass){
+      try { localStorage.setItem(`${KEY}.gtoken`, pass); } catch(e){}
+      return send("whoami", {}, { as: { email: "", name: "" }, retry: true }).then(res => {
+        if (!res) throw new Error("backend");
+        if (!res.ok && res.error === "code-required" && res.email) return { needCode: true, email: String(res.email).toLowerCase() };   // shared login: FC token next
+        if (!res.ok) { dropPass(); throw new Error(res.error || "not-on-list"); }
+        const email = String(res.email || "").toLowerCase(), me = res.me || {};
+        const local = email.split("@")[0], nice = local.split(/[._-]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+        if (batchOf(email) || lc(roster().admins).includes(email) || lc(C.adminEmails).includes(email))   // on the old lists: same rules as before
+          write("user", { name: me.name || nice, email, batch: batchOf(email), google: true, startDate: C.demoUser.startDate });
+        else if (me.people)
+          write("user", { name: me.name || nice, email, batch: me.batch || "", access: me.access || [], admin: !!me.admin, retake: !!me.retake, people: true, google: true, startDate: C.demoUser.startDate });
+        else { dropPass(); throw new Error("not-on-list"); }
+        return { needCode: false, email };
+      });
+    },
+
     /** Temporary sign-in by typed email (stopgap until Google sign-in is live). */
     signInDemo(email){
-      email = String(email).trim();
+      email = String(email).trim(); dropPass();
       if (!isAllowed(email)) throw new Error(isCompanyEmail(email) ? "not-on-list" : "not-company");
       if ((C.codeLogin || []).includes(batchOf(email)) && C.backendUrl && !C.demo) throw new Error("need-code");   // the sign-in page then asks for the code and calls signInWithCode
       const local = String(email).split("@")[0];
@@ -236,7 +257,8 @@ window.LMS_CONFIG = {
 
     /** Shared-login batches: check the typed access code with the Sheet, then sign in as that person.
         Resolves on success; rejects with "code-invalid", "code-inactive" or "backend" (couldn't reach the Sheet). */
-    signInWithCode(email, code){
+    signInWithCode(email, code, google){
+      if (!google) dropPass();   // typed email: no Google pass (google=true keeps it: Google sign-in, then the FC token)
       email = String(email).trim().toLowerCase().replace(/\+[^@]*@/, "@"); code = String(code || "").trim().toUpperCase();
       const local = email.split("@")[0], fallback = local.charAt(0).toUpperCase() + local.slice(1);
       return send("checkCode", {}, { as: { email, name: fallback, code }, retry: true }).then(res => {
@@ -250,7 +272,7 @@ window.LMS_CONFIG = {
 
     /** Not on the old lists: ask the Sheet's People tab (Settings). Resolves on success; rejects with "not-on-list", "removed" or "backend". */
     signInWithPeople(email){
-      email = String(email).trim().toLowerCase();
+      email = String(email).trim().toLowerCase(); dropPass();
       if (!isCompanyEmail(email)) return Promise.reject(new Error("not-company"));
       return send("whoami", {}, { as: { email, name: email }, retry: true }).then(res => {
         if (!res) throw new Error("backend");
@@ -275,6 +297,8 @@ window.LMS_CONFIG = {
     canReview(){ const u = currentUser(); return !u || !(C.noReview || []).includes(batchOf(u.email)); },
 
     /** Existing AMs (batch "000002"): they get the simulations-and-practice dashboard instead of the 10-day path. */
+    /** On the People tab with no batch, no General and no admin: only the Department page is for them. */
+    deptOnly(){ const u = currentUser(); return !!u && !!u.people && !batchOf(u.email) && !accessOf().includes("general") && !window.LMS.isAdmin(); },
     isExisting(){ const u = currentUser(); return !!u && (batchOf(u.email) === "000002" || (!!u.people && !batchOf(u.email) && accessOf().includes("general"))); },
 
     /** People tab access: has(“general”), has(“team lead”), etc. (always false for people signed in from the old lists) */
@@ -376,7 +400,7 @@ window.LMS_CONFIG = {
     adminData(passcode){ return send("adminData", { passcode }, { retry:true }); },
 
     signOut(){
-      try { localStorage.removeItem(`${KEY}.user`); sessionStorage.removeItem(`${KEY}.idtoken`); } catch(e){}
+      try { localStorage.removeItem(`${KEY}.user`); sessionStorage.removeItem(`${KEY}.idtoken`); localStorage.removeItem(`${KEY}.gtoken`); } catch(e){}
       location.href = "index.html";
     },
 
