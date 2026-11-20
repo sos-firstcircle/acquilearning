@@ -254,7 +254,7 @@ function render(){
     </tbody></table></div>
 
     <h2 class="sec">Manual grading</h2>
-    <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the switch for their batch is on (green). Saving again keeps the old version and shows the newest.</p>
+    <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the Visible to AMs switch for their batch is on (green). To see the switch, pick a batch at the top. Saving again keeps the old version and shows the newest.</p>
     ${MAN.length ? `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement">${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
       <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select>
 </div>
@@ -403,15 +403,15 @@ function render(){
       if (open && !d.innerHTML) d.innerHTML = detail(T[b.dataset.it - 1]); d.hidden = !open; b.setAttribute("aria-expanded", open); });
   };
   /* ---- Manual grading form ---- */
-  const visBatches = [...new Set([...batches, ...mrows.map(r => r.Batch).filter(Boolean)])].sort();
-  const mVis = () => { if (!$("mvis")) return; const id = $("mr").value;
-    $("mvis").innerHTML = `<span class="small"><b>Visible to AMs</b></span>` + visBatches.map(b => { const on = !mHidden(id, b);
-      return `<label class="sw" title="On = batch ${esc(b)} sees this in My grades. Admins always see it."><input type="checkbox" data-vb="${esc(b)}" ${on ? "checked" : ""}><i></i>Batch ${esc(b)} <span class="st">${on ? "Shown" : "Hidden"}</span></label>`; }).join("") + `<span class="small muted" id="mvmsg"></span>`;
-    $("mvis").querySelectorAll("[data-vb]").forEach(cb => cb.onchange = async () => { const b = cb.dataset.vb, on = cb.checked, st = cb.parentNode.querySelector(".st");
+  const mVis = () => { if (!$("mvis")) return; const id = $("mr").value, b = batchSel;
+    if (!b) { $("mvis").innerHTML = ""; return; }   // All batches: no switch; pick a batch at the top first
+    const on = !mHidden(id, b);
+    $("mvis").innerHTML = `<label class="sw" title="On = batch ${esc(b)} sees this in My grades. Admins always see it."><input type="checkbox" id="mvsw" ${on ? "checked" : ""}><i></i><b>Visible to AMs in batch ${esc(b)}</b> <span class="st">${on ? "Shown" : "Hidden"}</span></label><span class="small muted" id="mvmsg"></span>`;
+    const cb = $("mvsw"); cb.onchange = async () => { const on = cb.checked, st = cb.parentNode.querySelector(".st");
       cb.disabled = true; st.textContent = "Saving…";
       const r = await LMS.setSetting("manualHide." + id + "." + b, on ? "off" : "on").catch(() => null); cb.disabled = false;
       if (r && r.ok) { st.textContent = on ? "Shown" : "Hidden"; $("mvmsg").textContent = ""; }
-      else { cb.checked = !on; st.textContent = !on ? "Shown" : "Hidden"; $("mvmsg").textContent = "Couldn't save. Try again."; } }); };
+      else { cb.checked = !on; st.textContent = !on ? "Shown" : "Hidden"; $("mvmsg").textContent = "Couldn't save. Try again."; } }; };
   const fmtN = x => String(Math.round(x * 100) / 100);
   /* numeric rubric: points per item from the picked choices */
   const mCalc = m => { let score = 0, max = 0, all = true;
