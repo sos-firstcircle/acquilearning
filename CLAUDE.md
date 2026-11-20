@@ -47,6 +47,13 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - Code.gs: `people_()`, `batches_()`, `setting_()` (cached 30s), `isAdmin_` (ADMIN_EMAILS or Access "Admin"), `canRetake_` (RETAKE_BATCHES or Batches Retake), actions whoami / directory / adminPeople / peopleAdd / peopleRemove / peopleUpdate / teamsSave / teamRename / batchesSave / grantGeneral. myProgress also returns `me`.
 - Client: `LMS.signInWithPeople` (index.html falls back to it on "not-on-list"), `LMS.hasAccess(name)`, People users carry `people:true, access, batch, admin, retake` in the saved user. "removed" from the backend signs them out.
 
+## Sign-in (Google, since Nov 2026)
+- Google sign-in without a Cloud project: a second deployment of Code.gs ("Execute as Me", access "Anyone within First Circle", URL in `loginUrl` in lms.js). Its `doGet` reads `Session.getActiveUser()`, checks the lists, and returns a signed pass (email + 30-day expiry, HMAC with `LOGIN_SECRET` in Script Properties, never in the repo) to `index.html#g=...`. The hub stores it (localStorage `amacademy.gtoken`) and sends it as `gtoken` with every request; `userFromRequest_` trusts it over any typed email.
+- Typed email is OFF (Settings key `emailLogin` = "on" brings it back), except `EMAIL_LOGIN_ALWAYS` (hanna.test, via `index.html?email=1`). Google sign-ins skip the FC token and the trainer password.
+- Batch 110926 and test1-3 are no longer in Code.gs `BATCHES`: 110926 signs in from the People tab (Settings switch `peopleLogin` is on). They are still in roster.js for the dashboard.
+- People users with no batch, no General and not admin land on Department only (`LMS.deptOnly()`).
+- Login deployment needs a New version only when `doGet`/`checkEmail_` change; say so when that happens.
+
 ## Grades page charts (admins)
 - `grades.html` has "Overall" (average best score per exam) and "Per question" charts. Per question uses the `Items` column of the Grades tab: a JSON record sent with each attempt (`items` in `LMS.saveResult`).
 - Product Knowledge 1-3: `Items` = `{"section.question": [points, answer]}`, keyed by position in the questions file (not the shuffled order). Add new questions at the END of a section, or old answers line up with the wrong question.
