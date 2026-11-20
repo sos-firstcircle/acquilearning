@@ -167,13 +167,29 @@ const ADMIN_BATCHES = LMS.isAdmin() ? Object.keys((window.LMS_ROSTER || {}).batc
 let adminBatch = (() => { let v = ""; try { v = localStorage.getItem("acqui.adminBatch") || ""; } catch (e) {} return ADMIN_BATCHES.includes(v) ? v : (ADMIN_BATCHES[0] || ""); })();
 const batchName = b => b === "000000" ? "Test batch (000000)" : b === "000001" ? "Hanna's test batch (000001)" : `Batch ${b} (${new Date(2000 + +b.slice(4), +b.slice(0, 2) - 1, +b.slice(2, 4)).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })})`;
 const viewBatch = e => { const b = adminBatch || LMS.batchOf(e); return (LMS.config.viewAs || {})[b] || b; };   // viewAs in lms.js: a test batch sees another batch's view
-const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[viewBatch(u && u.email)]; return s ? new Date(s + "T00:00:00+08:00") : null; };
-const opensText = d => { const t = opensAt(d); return t ? t.toLocaleDateString("en-PH", { weekday:"short", month:"short", day:"numeric", timeZone:"Asia/Manila" }) : ""; };
+const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[viewBatch(u && u.email)]; return s ? new Date(s.includes("T") ? s + ":00+08:00" : s + "T00:00:00+08:00") : null; };   // "YYYY-MM-DD" = midnight, "YYYY-MM-DDTHH:MM" = that time (Manila)
+const opensText = d => { const t = opensAt(d), s = d.opens && d.opens[viewBatch((LMS.user() || {}).email)] || ""; return t ? t.toLocaleDateString("en-PH", { weekday:"short", month:"short", day:"numeric", timeZone:"Asia/Manila" }) + (s.includes("T") ? ", " + t.toLocaleTimeString("en-PH", { hour:"numeric", minute:"2-digit", timeZone:"Asia/Manila" }) : "") : ""; };
+/* Tiles for the batch being viewed (LMS_PLANS in modules.js). A merged tile keeps the first day's number as its id and shows "Days 6–8". */
+const planOf = () => (window.LMS_PLANS || {})[viewBatch((LMS.user() || {}).email)] || null;
+const dayLabel = d => d.label || "Day " + d.day;
+function planDays(){
+  const all = window.LMS_DAYS, byNum = n => all.find(x => x.day === n), plan = planOf();
+  if (!plan) return all.filter(d => d.day <= 10);
+  return plan.tiles.map(t => {
+    if (!Array.isArray(t)) return byNum(t);
+    const parts = t.map(byNum).filter(Boolean), first = parts[0], b = viewBatch((LMS.user() || {}).email);
+    return { ...first, label: `Days ${t[0]}–${t[t.length - 1]}`, span: t.length,
+      tasks: [].concat(...parts.map(p => p.tasks.map(x => ({ ...x, label: x.label + " (Day " + p.day + ")" })))),
+      exams: [].concat(...parts.map(p => p.exams)), materials: [].concat(...parts.map(p => p.materials || [])),
+      sessions: [].concat(...parts.map(p => p.sessions || [])), hold: parts.map(p => p.hold).find(Boolean) };
+  }).filter(Boolean);
+}
+const lastDayNum = days => days.reduce((n, d) => Math.max(n, d.day + (d.span || 1) - 1), 0);
 function compute(){
   const P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   let prevComplete = true, current = null;
   const u = LMS.user(), catchDays = (LMS.config.catchUp || {})[viewBatch(u && u.email)] || [];
-  const days = window.LMS_DAYS.map(d0 => {
+  const days = planDays().map(d0 => {
     const t = d0.titles && d0.titles[viewBatch(u && u.email)], d = t ? { ...d0, title: t } : d0;   // titles: { batch: "..." } = per-batch day name
     const at = opensAt(d);
     if (at && Date.now() < at.getTime()) { prevComplete = false; return { ...d, empty: !d.tasks.length && !(d.materials||[]).length && !d.exams.length, tasksDone: 0, status: "locked", notYet: true }; }   // its date hasn't come yet
@@ -258,7 +274,7 @@ function dropdown(sel, P){
     else if (sel.materialsBelow) body = `<div class="two keep">${tasks ? `<div>${taskList}</div>` : "<div></div>"}${soonGrp ? `<div>${soonGrp}</div>` : "<div></div>"}</div>${mats ? `<div style="margin-top:6px">${matsBlock}</div>` : ""}`;
     else body = `<div class="two">${tasks ? `<div>${taskList}${soonGrp}</div>` : "<div></div>"}${matsBlock}</div>`;
   }
-  return `<div class="drop">${body}${examHtml}${daySessions(sel)}${sel.status==="complete"?`<div class="daydone">${ico("check",16)} Day ${sel.day} complete</div>`:""}${catchBtn(sel)}</div>`;
+  return `<div class="drop">${body}${examHtml}${daySessions(sel)}${sel.status==="complete"?`<div class="daydone">${ico("check",16)} ${dayLabel(sel)} complete</div>`:""}${catchBtn(sel)}</div>`;
 }
 
 /* Yes/No on a live session. The reply is saved to the Sheet (Sessions tab) and cached in this browser, so a refresh still shows the highlighted button.
@@ -326,7 +342,7 @@ function gradedHtml(days, P){
     const upcoming = d.status === "locked" || e.soon;
     const mark = isDone ? `<span class="mk done" role="img" aria-label="Done" title="Done">${CHECK_ICON}</span>`
       : `<span class="mk todo" role="img" aria-label="${upcoming ? "Upcoming" : "Not done yet"}" title="${upcoming ? "Upcoming" : "Not done yet"}">${CROSS_ICON}</span>`;
-    return `<li><button data-day="${d.day}">${esc(e.label)}<small>Day ${d.day}</small></button>${mark}</li>`;
+    return `<li><button data-day="${d.day}">${esc(e.label)}<small>${dayLabel(d)}</small></button>${mark}</li>`;
   }).join("")).join("")}</ul>`;
 }
 
@@ -370,16 +386,18 @@ function renderExisting(){
 function render(){
   if (LMS.isExisting() || GENERAL) return renderExisting();
   const u = LMS.user(), { days, current, P } = compute();
-  const completeCount = days.filter(d => d.status === "complete").length;
-  if (completeCount === days.length && !LMS.isAdmin()) LMS.syncDone.then(() => LMS.grantGeneral()).then(res => { if (res && res.changed) renderSide("dashboard"); });   // finished the path: General access (after sync, so the People-tab copy is current); sidebar shows Simulations + Library right away
+  const completeCount = days.filter(d => d.status === "complete").reduce((n, d) => n + (d.span || 1), 0), totalDays = lastDayNum(days), allDone = days.every(d => d.status === "complete");
+  const plan = planOf(), gate = plan && plan.generalAfter && days.find(d => d.day === plan.generalAfter);
+  if ((gate ? gate.status === "complete" : allDone) && !LMS.isAdmin()) LMS.syncDone.then(() => LMS.grantGeneral()).then(res => { if (res && res.changed) renderSide("dashboard"); });   // finished the path: General access (after sync, so the People-tab copy is current); sidebar shows Simulations + Library right away
 
   const hour = new Date().getHours(), greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-  const sub = completeCount === days.length ? "You've completed the 2-week path. Congratulations!"
-    : current ? `Day ${current} of ${days.length}` : "Your lessons are on the way.";
+  const curTile = days.find(d => d.day === current);
+  const sub = allDone ? "You've completed the 2-week path. Congratulations!"
+    : curTile ? `${dayLabel(curTile)} of ${totalDays}` : "Your lessons are on the way.";
 
   const isAdm = LMS.isAdmin(), look = d => d.status;   // admins: locked days stay gray but show a check instead of the padlock (they can still open them)
-  const card = d => `<button class="card ${look(d)}" data-day="${d.day}" aria-expanded="${d.day===selected}" aria-label="Day ${d.day}${d.title?": "+esc(d.title):""}, ${STATUS_TEXT[look(d)]}">
-      <span class="st">${isAdm && d.status==="locked" ? CHECK_ICON : STATUS_ICON[d.status]}</span><span class="chev">${CHEVRON}</span><span class="day">Day ${d.day}</span>${d.title?`<span class="tt">${esc(d.title)}</span>`:""}</button>`;
+  const card = d => `<button class="card ${look(d)}" data-day="${d.day}" aria-expanded="${d.day===selected}" aria-label="${dayLabel(d)}${d.title?": "+esc(d.title):""}, ${STATUS_TEXT[look(d)]}">
+      <span class="st">${isAdm && d.status==="locked" ? CHECK_ICON : STATUS_ICON[d.status]}</span><span class="chev">${CHEVRON}</span><span class="day">${dayLabel(d)}</span>${d.title?`<span class="tt">${esc(d.title)}</span>`:""}</button>`;
 
   const weeks = Object.entries(window.LMS_WEEKS).map(([w,label]) => {
     const wd = days.filter(d => String(d.week)===w);
@@ -394,7 +412,7 @@ function render(){
   document.getElementById("app").innerHTML = `
     <div class="hello"><div><h1>${greet}, ${esc(LMS.firstName(u.name))}</h1><p>${sub}</p></div>
       ${ADMIN_BATCHES.length ? `<label class="small muted" style="display:flex;flex-direction:column;gap:4px">Viewing as<select id="adminBatch" style="font:inherit;font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--line,#ccc);background:var(--paper,#fff);color:var(--ink)">${ADMIN_BATCHES.map(b => `<option value="${b}" ${b===adminBatch?"selected":""}>${esc(batchName(b))}</option>`).join("")}</select></label>` : ""}
-      <div class="overall">Progress<b>${completeCount} of ${days.length} days</b></div></div>
+      <div class="overall">Progress<b>${completeCount} of ${totalDays} days</b></div></div>
     <div class="segs" aria-hidden="true">${days.map(d=>`<i class="${look(d)}"></i>`).join("")}</div>
     <div class="lower"><div>${weeks}</div>
       <aside><div class="panel"><h2>Upcoming sessions</h2>${sessionsHtml()}</div>
@@ -406,7 +424,7 @@ document.addEventListener("click", e => {
   if (dl) { e.preventDefault(); fetch(dl.href).then(r => { if (!r.ok) throw 0; return r.blob(); }).then(b => { const u = URL.createObjectURL(new Blob([b], { type:"application/octet-stream" })), l = document.createElement("a"); l.href = u; l.download = dl.getAttribute("download"); document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }).catch(() => { location.href = dl.href; }); return; }
   const d = e.target.closest("[data-day]"); if (d){ const n = +d.dataset.day; selected = selected === n ? null : n; render(); return; }
   const m = e.target.closest("[data-markday]");
-  if (m){ const day = window.LMS_DAYS.find(x => x.day === +m.dataset.markday);
+  if (m){ const day = compute().days.find(x => x.day === +m.dataset.markday);
     day.tasks.forEach(t => LMS.complete(t.id)); day.exams.forEach(e => { if (!e.soon) LMS.complete(e.id); }); LMS.complete("catchup-d" + day.day);
     advance(); return; }
   const rv = e.target.closest("[data-rsvp]");

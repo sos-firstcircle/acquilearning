@@ -25,11 +25,19 @@
 window.LMS_WEEKS = { 1: "Week 1", 2: "Week 2" };
 
 window.LMS_DAY_DEFS = {};
+
+/* Per-batch tile layout. A batch not listed here sees Days 1 to 10, one tile each.
+   tiles: day numbers in order; a list like [6,7,8] is ONE tile holding those days' tasks, exams, materials and sessions
+   (ticks and scores are saved per task/exam id, so moving or merging days never loses progress).
+   generalAfter: the day whose completion gives General access (Simulations + Library). Default: the last tile. */
+window.LMS_PLANS = {
+  "110926": { tiles: [1, 2, 3, 4, 5, [6, 7, 8], 9, 10, 11, 12], generalAfter: 10 }   // ASEAN holiday week: Days 6-8 merged, Days 11-12 added
+};
 // Each day lives in its own file (days/day-01.js ... day-10.js) so several people (or chats) can edit different days
 // without touching each other's work. They are loaded here, then days/build.js assembles window.LMS_DAYS.
 (function(){
   const base = document.currentScript.src.replace(/modules\.js(\?.*)?$/, "days/");
-  const files = Array.from({ length: 10 }, (_, i) => "day-" + String(i + 1).padStart(2, "0") + ".js").concat("build.js");
+  const files = Array.from({ length: 12 }, (_, i) => "day-" + String(i + 1).padStart(2, "0") + ".js").concat("build.js");
   files.forEach(f => document.write('<script src="' + base + f + '"><\/script>'));
 })();
 
