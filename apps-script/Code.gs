@@ -174,7 +174,8 @@ function doPost(e) {
     if (req.action === "myGrades") {
       const mine = function (r) { return String(r.Email).toLowerCase() === user.email; };
       return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }),
-        manual: readRows_(MANUAL_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }) });   // their own trainer-graded results only
+        manual: readRows_(MANUAL_SHEET).filter(mine).filter(function (r) { return setting_("manualHide." + r["Rubric ID"]) !== "on"; })   // admins can hide a requirement from AMs (Grades page toggle)
+          .map(function (r) { delete r.Items; return r; }) });   // their own trainer-graded results only
     }
     if (req.action === "adminData") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");

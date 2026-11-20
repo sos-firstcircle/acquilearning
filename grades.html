@@ -223,7 +223,8 @@ function render(){
     <h2 class="sec">Manual grading</h2>
     <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Only admins and the person graded (in their My grades) see them. Saving again keeps the old version and shows the newest.</p>
     ${MAN.length ? `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement">${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
-      <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select></div>
+      <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select>
+      <label class="small" title="Off = AMs don't see this requirement in their My grades. Admins always see it."><input type="checkbox" id="mvis"> AMs can see this grade</label><span class="small muted" id="mvmsg"></span></div>
     <div id="mform"></div><div id="mlist" style="margin-top:14px"></div>` : '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>'}
 
     <h2 class="sec">Overall</h2><p class="muted small" style="margin:0 0 10px">Average best score per exam for the selected batch. The dark line is the pass mark.</p>
@@ -368,7 +369,9 @@ function render(){
       if (open && !d.innerHTML) d.innerHTML = detail(T[b.dataset.it - 1]); d.hidden = !open; b.setAttribute("aria-expanded", open); });
   };
   /* ---- Manual grading form ---- */
-  const mDraw = () => { if (!$("mr")) return;
+  const hideKey = id => "manualHide." + id;
+  const mVis = () => { if (!$("mvis")) return; $("mvis").checked = LMS.setting(hideKey($("mr").value), "") !== "on"; };
+  const mDraw = () => { if (!$("mr")) return; mVis();
     const m = manOf($("mr").value), e = $("mp").value, prev = e ? mlast[e + "|" + m.id] : null;
     let old = null; try { old = prev ? JSON.parse(prev.Items || "") : null; } catch (er) {}
     const oldOf = (si, ii) => (old && old.sections && old.sections[si] && old.sections[si].items[ii]) || [];
@@ -400,7 +403,12 @@ function render(){
     if (res && res.ok) { $("mmsg").textContent = "Saved. Reloading…"; MSEL = { r: m.id, p: e }; load(sessionStorage.getItem("amhub.adminpc") || ""); }
     else { $("msave").disabled = false; $("mmsg").textContent = !res ? "Couldn't reach the Sheet." : res.error === "unknown-action" ? "The Apps Script needs to be redeployed first (New version)." : "Couldn't save (" + res.error + ")."; } };
   if ($("mr")) { if (MSEL.r && manOf(MSEL.r)) $("mr").value = MSEL.r; if ([...$("mp").options].some(o => o.value === MSEL.p)) $("mp").value = MSEL.p;
-    $("mr").onchange = () => { MSEL.r = $("mr").value; mDraw(); }; $("mp").onchange = () => { MSEL.p = $("mp").value; mDraw(); }; mDraw(); }
+    $("mr").onchange = () => { MSEL.r = $("mr").value; mDraw(); };
+    LMS.loadSettings().then(mVis).catch(() => {});
+    $("mvis").onchange = async () => { const id = $("mr").value, on = $("mvis").checked; $("mvis").disabled = true; $("mvmsg").textContent = "Saving…";
+      const r = await LMS.setSetting(hideKey(id), on ? "" : "on").catch(() => null); $("mvis").disabled = false;
+      if (r && r.ok) $("mvmsg").textContent = on ? "AMs can see it." : "Hidden from AMs.";
+      else { $("mvis").checked = !on; $("mvmsg").textContent = "Couldn't save. Try again."; } }; $("mp").onchange = () => { MSEL.p = $("mp").value; mDraw(); }; mDraw(); }
   $("app").querySelectorAll("[data-medit]").forEach(b => b.onclick = () => { const [em, id] = b.dataset.medit.split("|"); MSEL = { r: id, p: em };
     if ($("mr")) { $("mr").value = id; if (![...$("mp").options].some(o => o.value === em)) $("mp").insertAdjacentHTML("beforeend", `<option value="${esc(em)}">${esc(nameOf(em))}</option>`); $("mp").value = em; mDraw(); $("mr").scrollIntoView({ behavior: "smooth", block: "center" }); } });
   if ([...$("ix").options].some(o => o.value === keepIx)) $("ix").value = keepIx; $("isort").value = keepSort;
@@ -427,7 +435,7 @@ async function loadMine(){
 const honorOf = r => { const m = /^Honor code: (.*?)(?: \| |$)/.exec(String(r.Details || "")); return m ? "Taken by: " + m[1] : ""; };
 let MINE_MAN = [];   // the person's own manual (trainer-graded) results, latest per requirement shown
 function drawMine(grades, note, retry){
-  const ml = {}; MINE_MAN.slice().sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => ml[r["Rubric ID"]] = r);
+  const ml = {}; MINE_MAN.filter(r => LMS.setting("manualHide." + r["Rubric ID"], "") !== "on").sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => ml[r["Rubric ID"]] = r);
   const man = Object.values(ml), manHtml = man.length ? `<h2 class="sec">Trainer-graded</h2><div class="scroll"><table class="tbl"><thead><tr><th>Requirement</th><th>Grade</th><th>When</th><th>Details</th></tr></thead><tbody>
       ${man.map(r => `<tr><td><b>${esc(nice(r["Rubric ID"]))}</b></td><td><span class="pill ${mClass(r["Rubric ID"], r.Overall)}">${esc(r.Overall || "Graded")}</span></td><td class="small muted" style="white-space:nowrap">${esc(when(r.Timestamp))}</td><td class="small" style="white-space:pre-line;min-width:260px">${esc(String(r.Details || "").replace(/^'/, ""))}</td></tr>`).join("")}</tbody></table></div>` : "";
   const rows = grades.filter(shown).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
