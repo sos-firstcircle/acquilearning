@@ -99,7 +99,7 @@ const pill = r => `<span class="pill ${okRow(r) ? "pass" : "fail"}">${okRow(r) ?
 const PROD = Object.keys(BANKS), DEC = "__decision";
 /* Acqui Service exams: Items = {rev:[[question text, points, how]]} in exam order ("Part N · Title." starts each part).
    pts = points of a question when not 1 (index from 0), as set with pts on the tasks in sims/acqui/exam-*.js. */
-const ACQ = { "exam-acqui-day9": { pts: { 17: 3, 18: 5, 19: 5, 20: 5, 21: 5 } }, "exam-acqui-activities-2": { pts: {} } };
+const ACQ = { "exam-acqui-day9": { pts: { 17: 3, 18: 5, 19: 5, 20: 5, 21: 5 } }, "exam-acqui-activities-2": { pts: { 1: 6, 3: 14.5, 10: 6.5 } } };
 /* Any other exam that sends Items = {rev:[[question text, points, how, max points]]} gets the same part-by-part view automatically.
    The 4th value (max points) is optional; without it a question counts as 1 point unless listed in ACQ above. */
 const isRevExam = (id, rows) => !BANKS[id] && id !== SIM_ID && (ACQ[id] || rows.some(r => r["Exam ID"] === id && /^\{"rev":\[\[/.test(String(r.Items || ""))));
@@ -111,6 +111,12 @@ const noteOf = (r, bank) => { let it = null; try { it = JSON.parse(r.Items || ""
       const w = (t.items || []).filter(i => !i[1]).map(i => i[0]); if (w.length) out.push(t.title + " - " + w.join(", ") + "."); else if ((t.crit || []).length) out.push(t.title + " - critical error."); });
     const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\.?\s*(Mistakes:[\s\S]*|No mistakes\.)$/, "").trim();
     return (head ? head[0].toUpperCase() + head.slice(1) + ".\n" : "") + (out.length ? "Mistakes:\n" + out.join("\n") : "No mistakes."); }
+  if (Array.isArray(it.rev) && isRevExam(r["Exam ID"], [r])) {   // Acqui-style exams: [question text, points, how, max?] in exam order
+    const conf = ACQ[r["Exam ID"]] || { pts: {} }; let mx = it.rev.map((q, i) => +q[3] || conf.pts[i] || 1);
+    if (Math.abs(mx.reduce((a, b) => a + b, 0) - Number(r.Max)) > 0.01) mx = it.rev.map(q => +q[3] || 1);   // an older version of the exam
+    const miss = []; it.rev.forEach((q, i) => { const p = Math.round((+q[1] || 0) * 100) / 100; if (p < mx[i]) miss.push((i + 1) + (q[2] === "skipped" ? " (skipped)" : p > 0 ? " (partly)" : "")); });
+    const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\n[\s\S]*$/, "").replace(/\.$/, "").trim();
+    return (head ? head + ".\n" : "") + `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%).\n` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes."); }
   if (!bank) return null; if (it.rev) it = fromReview(bank, it.rev); if (!it) return null;
   let n = 0; const miss = []; bank.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => { n++; if (q.answer === null || q.answer === undefined) return;
     const a = it[si + "." + qi]; if (Array.isArray(a) && a[0] < (q.type === "multi" ? q.answer.length * 0.5 : (q.points || 1))) miss.push(n); }));
