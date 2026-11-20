@@ -34,7 +34,7 @@ function renderSide(active){
       <li class="nav-label">Trainers</li>
       ${link("grades.html","grades","Grades","grades")}${link("sessions.html","cal","Sessions","sessions")}${link("exams.html","exam","Exams","exams")}${link("settings.html","admin","Settings","settings")}` : `
       ${link("dashboard.html","home","Dashboard","dashboard")}
-      ${LMS.hasAccess("general") && !LMS.isExisting() ? link("dashboard.html?view=general","home","Dashboard (General)","general") : ""}
+      ${LMS.hasAccess("general") && !LMS.isExisting() ? link("dashboard.html?view=general","exam","Simulations","general") : ""}
       ${C.calendar.link ? link(C.calendar.link,"cal","Training calendar","cal",true) : ""}
       ${link("grades.html","grades","Grades","grades")}
       ${LMS.isExisting() || LMS.hasAccess("general") ? link("library.html","book","Library","library") : ""}
