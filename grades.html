@@ -114,9 +114,11 @@ const noteOf = (r, bank) => { let it = null; try { it = JSON.parse(r.Items || ""
   if (Array.isArray(it.rev) && isRevExam(r["Exam ID"], [r])) {   // Acqui-style exams: [question text, points, how, max?] in exam order
     const conf = ACQ[r["Exam ID"]] || { pts: {} }; let mx = it.rev.map((q, i) => +q[3] || conf.pts[i] || 1);
     if (Math.abs(mx.reduce((a, b) => a + b, 0) - Number(r.Max)) > 0.01) mx = it.rev.map(q => +q[3] || 1);   // an older version of the exam
-    const miss = []; it.rev.forEach((q, i) => { const p = Math.round((+q[1] || 0) * 100) / 100; if (p < mx[i]) miss.push((i + 1) + (q[2] === "skipped" ? " (skipped)" : p > 0 ? " (partly)" : "")); });
+    const miss = [], subs = []; it.rev.forEach((q, i) => { const p = Math.round((+q[1] || 0) * 100) / 100; if (p >= mx[i]) return;
+      miss.push((i + 1) + (q[2] === "skipped" ? " (skipped)" : p > 0 ? " (partly)" : ""));
+      const w = Array.isArray(q[4]) ? q[4].filter(x => !x[1]).map(x => x[0]) : []; if (w.length) subs.push("Item " + (i + 1) + " - " + w.join(", ") + "."); });   // sub-items (saved from Nov 20 on)
     const head = String(r.Details || "").replace(/^Honor code: .*?(?: \| |$)/, "").replace(/\n[\s\S]*$/, "").replace(/\.$/, "").trim();
-    return (head ? head + ".\n" : "") + `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%).\n` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` : "No mistakes."); }
+    return (head ? head + ".\n" : "") + `${r.Score} of ${r.Max} points (${r.Max ? Math.round(r.Score / r.Max * 100) : 0}%).\n` + (miss.length ? `Mistakes on item${miss.length > 1 ? "s" : ""}: ${miss.join(", ")}.` + (subs.length ? "\n" + subs.join("\n") : "") : "No mistakes."); }
   if (!bank) return null; if (it.rev) it = fromReview(bank, it.rev); if (!it) return null;
   let n = 0; const miss = []; bank.sections.forEach((sec, si) => sec.questions.forEach((q, qi) => { n++; if (q.answer === null || q.answer === undefined) return;
     const a = it[si + "." + qi]; if (Array.isArray(a) && a[0] < (q.type === "multi" ? q.answer.length * 0.5 : (q.points || 1))) miss.push(n); }));
@@ -361,9 +363,9 @@ function render(){
       const recs = use.map(a => ({ who: a.who, pts: Math.round(p.qs.reduce((n, q) => n + (+a.it.rev[q.i][1] || 0), 0) * 100) / 100 }));
       const full = recs.filter(a => a.pts >= max), zero = recs.filter(a => !a.pts);
       return { n: k + 1, ...p, max, recs, full, zero, part: recs.length - full.length - zero.length, avg: Math.round(recs.reduce((n, a) => n + a.pts, 0) / recs.length * 10) / 10 }; });
-    const detail = o => { const rows = o.qs.map((q, j) => { const got = use.map(a => ({ who: a.who, p: Math.round((+a.it.rev[q.i][1] || 0) * 100) / 100, h: a.it.rev[q.i][2] }));
+    const detail = o => { const rows = o.qs.map((q, j) => { const got = use.map(a => ({ who: a.who, p: Math.round((+a.it.rev[q.i][1] || 0) * 100) / 100, h: a.it.rev[q.i][2], s: Array.isArray(a.it.rev[q.i][4]) ? a.it.rev[q.i][4].filter(x => !x[1]).map(x => x[0]) : [] }));
         const ok = got.filter(a => a.p >= q.max), bad = got.filter(a => a.p < q.max);
-        return `<div class="ch"><span class="muted small">Q${q.i + 1}</span><span>${esc(q.text)} <span class="muted small">(${q.max} pt${q.max === 1 ? "" : "s"})</span>${bad.length ? `<div class="small muted">Lost points: ${bad.map(a => esc(a.who) + " (" + a.p + "/" + q.max + (HOW[a.h] ? ", " + HOW[a.h] : "") + ")").join("; ")}</div>` : ""}</span><span class="trk" title="Full points: ${names(ok)}"><i class="c-ok" style="width:${ok.length / got.length * 100}%"></i></span><span class="v">${ok.length} of ${got.length} full</span></div>`; }).join("");
+        return `<div class="ch"><span class="muted small">Q${q.i + 1}</span><span>${esc(q.text)} <span class="muted small">(${q.max} pt${q.max === 1 ? "" : "s"})</span>${bad.length ? `<div class="small muted">Lost points: ${bad.map(a => esc(a.who) + " (" + a.p + "/" + q.max + (HOW[a.h] ? ", " + HOW[a.h] : "") + (a.s.length ? ": " + a.s.join(", ") : "") + ")").join("; ")}</div>` : ""}</span><span class="trk" title="Full points: ${names(ok)}"><i class="c-ok" style="width:${ok.length / got.length * 100}%"></i></span><span class="v">${ok.length} of ${got.length} full</span></div>`; }).join("");
       const ppl = o.recs.slice().sort((a, b) => a.pts - b.pts).map(a => `<tr><td>${esc(a.who)}</td><td>${a.pts}/${o.max}</td></tr>`).join("");
       return `<div class="idet"><p style="margin:0 0 8px"><b>${esc(o.title)}</b> <span class="muted small">${o.max} point${o.max === 1 ? "" : "s"}</span></p>${rows}
         <table class="tbl" style="margin-top:12px;font-size:13px"><thead><tr><th>Onboardee</th><th>Points</th></tr></thead><tbody>${ppl}</tbody></table></div>`; };

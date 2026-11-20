@@ -256,7 +256,8 @@
   function finishQ(pts, how, why, detail){
     if (state !== "asking") return;
     state = "done";
-    res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), mult: curMult, pts: pts * curMult, how: how, hint: hintUsed, wrongs: wrongs, why: why || "", detail: detail || "" });
+    res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), mult: curMult, pts: pts * curMult, how: how, hint: hintUsed, wrongs: wrongs, why: why || "", detail: detail || "", subs: lastSubs });
+    lastSubs = null;
     var last = n === TASKS.length - 1;
     var note = how === "skipped" ? "Skipped" : how === "wrong" ? why : how === "graded" ? fmtPts(pts) + " / " + SCALE + " points" + (hintUsed || wrongs ? " (" + [hintUsed ? "hint -" + fmtPts(HINT_COST) : "", wrongs ? wrongs + " wrong -" + fmtPts(loss) : ""].filter(Boolean).join(", ") + ")" : "") : fmtPts(pts) + (fmtPts(pts) === "1" ? " point" : " points") + (hintUsed || wrongs ? " (" + [hintUsed ? "hint -" + fmtPts(HINT_COST) : "", wrongs ? wrongs + " wrong -" + fmtPts(loss) : ""].filter(Boolean).join(", ") + ")" : "");
     box.innerHTML = '<div class="bar"><i style="width:' + ((n + 1) / TASKS.length * 100) + '%"></i></div><div class="k">Question ' + (n + 1) + ' of ' + TASKS.length + '</div>' +
@@ -278,14 +279,19 @@
       '<div class="row"><span>' + (window.ACQUI_STANDALONE ? '' : G ? '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back") + '</a>' : '<a href="../dashboard.html" style="font-size:13px;color:var(--teal)">' + (CFG.backLabel || "Back to Day 5") + '</a> · <a href="' + NEXT_HREF + '" style="font-size:13px;color:var(--teal)">' + NEXT_LABEL + '</a>') + '</span>' + (G && !(window.LMS && LMS.preview && LMS.preview()) ? '<a class="btn dark" href="../dashboard.html" id="exagain" style="text-decoration:none">Back to dashboard</a>' : '<button class="btn dark" id="exagain">Try again</button>') + '</div>';
     if (!G || (window.LMS && LMS.preview && LMS.preview())) document.getElementById("exagain").onclick = intro;
     stopTimer();
-    if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: MAXP, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return [r.text, r.pts, r.how]; }) }) }); } catch (err) {} }
+    if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: MAXP, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return r.subs && r.subs.length ? [r.text, r.pts, r.how, r.mult, r.subs] : [r.text, r.pts, r.how, r.mult]; }) }) }); } catch (err) {} }
     else try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
     /* If this ever becomes graded: LMS.saveResult({ id:"d5-nav-check", label:"Acqui navigation check", score:total, max:TASKS.length, pct:pct, kind:"lms", passing:PASS }) */
     window.ACQUI_EXAM_RESULT = { name: AM_NAME, score: capped, max: MAXP, pct: pct, passed: pass, seconds: secs, tasks: res };
   }
 
   /* a graded answer: r.items = [{label, w, ok}] (the weights add up to 1), r.bonus = same, r.extra = [{label, loss}], r.factor = multiplier (e.g. 0.5) */
+  /* sub-items of a graded answer, saved with the result for the Grades page: [label, 1 = right / 0 = wrong, expected] */
+  var lastSubs = null;
   function gradeIt(t, r){
+    lastSubs = (r.items || []).map(function(i){ return [i.label, i.ok ? 1 : 0, i.ok ? "" : String(i.exp || "")]; })
+      .concat((r.extra || []).filter(function(i){ return i.loss; }).map(function(i){ return [i.label, 0, ""]; }))
+      .concat(r.factor && r.factor < 1 ? [[r.factorLabel || "Score reduced", 0, ""]] : []);
     var sum = function(a, f){ return (a || []).reduce(function(x, i){ return x + f(i); }, 0); };
     var raw = sum(r.items, function(i){ return i.ok ? i.w : 0; }) + sum(r.bonus, function(i){ return i.ok ? i.w : 0; }) - sum(r.extra, function(i){ return i.loss; });
     raw = Math.max(0, raw) * (r.factor || 1);
@@ -325,8 +331,8 @@
   /* "Finish test" (next to Exit): everything not answered yet is 0 points */
   ACQUI.on("finish-test", function(){
     if (state === "idle") return;
-    if (state === "asking") res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), pts: 0, how: "skipped", hint: false, wrongs: 0, why: "", detail: "" });
-    for (var i = res.length; i < TASKS.length; i++) res.push({ text: TASKS[i].text.replace(/<[^>]+>/g, " "), pts: 0, how: "skipped", hint: false, wrongs: 0, why: "", detail: "" });
+    if (state === "asking") res.push({ text: TASKS[n].text.replace(/<[^>]+>/g, " "), mult: TASKS[n].pts || 1, pts: 0, how: "skipped", hint: false, wrongs: 0, why: "", detail: "" });
+    for (var i = res.length; i < TASKS.length; i++) res.push({ text: TASKS[i].text.replace(/<[^>]+>/g, " "), mult: TASKS[i].pts || 1, pts: 0, how: "skipped", hint: false, wrongs: 0, why: "", detail: "" });
     state = "idle"; finish();
   });
   /* Request this lead / Create Lead stay blocked until the learner picks "Proceed with getting lead" */
