@@ -347,6 +347,12 @@ function doPost(e) {
     }
     if (req.action === "grantGeneral") {        // the person finished Day 10: give them General access (People tab only)
       const sh = sheet_(PEOPLE_SHEET, PEOPLE_HEADER), map = peopleRowMap_(sh), r = map.rows[user.email];
+      if (!r && user.batch && !user.coded && user.email.indexOf("+") === -1) {   // onboardee from the old lists with no People row yet: add them, with General
+        const acc0 = ["Department", "General", user.batch].join(", ");
+        appendByHeader_(sh, { "Email": user.email, "Name": clean_(user.name) || nameFromEmail_(user.email), "Role": "Acquisition Manager", "Team": "", "Status": "Active", "Access": acc0, "Batch": "'" + user.batch });
+        audit_("system (Day 10 done)", "add", user.email, "", acc0); clearPeopleCache_();
+        return json_({ ok: true, changed: true });
+      }
       if (!r || map.col.Access === undefined) return json_({ ok: true, changed: false });
       const cell = sh.getRange(r, map.col.Access + 1), acc = splitAccess_(cell.getValue());
       if (acc.some(function (a) { return a.toLowerCase() === "general"; })) return json_({ ok: true, changed: false });

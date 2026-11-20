@@ -280,8 +280,9 @@ window.LMS_CONFIG = {
     /** People tab access: has(“general”), has(“team lead”), etc. (always false for people signed in from the old lists) */
     hasAccess(name){ return accessOf().includes(String(name).toLowerCase()); },
     /** Finished Day 10: ask the Sheet to add General to their access (People tab only). */
-    grantGeneral(){ const u = currentUser(); if (!u || !(u.people || u.peopleAccess) || accessOf().includes("general")) return Promise.resolve(null);   // only people on the People tab
-      return send("grantGeneral", {}).then(res => { if (res && res.ok && res.changed) { const su = storedUser(), k = su.people ? "access" : "peopleAccess"; write("user", { ...su, [k]: [...(su[k] || []), "General"] }); } return res; }); },
+    grantGeneral(){ const u = currentUser(); if (!u || !(u.people || batchOf(u.email)) || accessOf().includes("general")) return Promise.resolve(null);   // People tab users, and old-list onboardees (the backend adds their People row if missing)
+      if (LMS._granting) return LMS._granting;   // one request at a time (render() can run several times)
+      return LMS._granting = send("grantGeneral", {}).then(res => { if (res && res.ok && res.changed) { const su = storedUser(), k = su.people ? "access" : "peopleAccess"; write("user", { ...su, [k]: [...(su[k] || []), "General"] }); } LMS._granting = null; return res; }); },
 
     isAdmin(){ const u = currentUser(); return !!u && (C.demo || [...lc(C.adminEmails), ...lc(roster().admins)].includes(u.email.toLowerCase()) || (!!u.people && !!u.admin)); },
 

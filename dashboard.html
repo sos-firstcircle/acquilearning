@@ -371,7 +371,7 @@ function render(){
   if (LMS.isExisting() || GENERAL) return renderExisting();
   const u = LMS.user(), { days, current, P } = compute();
   const completeCount = days.filter(d => d.status === "complete").length;
-  if (completeCount === days.length && !LMS.isAdmin()) LMS.grantGeneral();   // finished the path: General access (People tab users only; no-op otherwise)
+  if (completeCount === days.length && !LMS.isAdmin()) LMS.syncDone.then(() => LMS.grantGeneral()).then(res => { if (res && res.changed) renderSide("dashboard"); });   // finished the path: General access (after sync, so the People-tab copy is current); sidebar shows Simulations + Library right away
 
   const hour = new Date().getHours(), greet = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
   const sub = completeCount === days.length ? "You've completed the 2-week path. Congratulations!"
