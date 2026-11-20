@@ -54,6 +54,15 @@
   .mtbl select{font:inherit;padding:4px 6px;border:1px solid var(--line);border-radius:8px;background:#fff}
   .mtbl textarea,#mon{font:inherit;font-size:13px;width:100%;min-width:180px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;resize:vertical}
   .mtbl td.sec{font-weight:700;background:var(--mist)}
+  .vis{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin:0 0 14px}
+  .sw{display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;position:relative}
+  .sw input{position:absolute;opacity:0;width:1px;height:1px}
+  .sw i{width:36px;height:20px;border-radius:20px;background:#cfd6dc;position:relative;transition:background .15s;flex:none}
+  .sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:left .15s}
+  .sw input:checked+i{background:var(--green)} .sw input:checked+i::after{left:18px}
+  .sw input:focus-visible+i{outline:2px solid var(--teal);outline-offset:2px} .sw input:disabled+i{opacity:.5}
+  .sw .st{font-size:12px;color:var(--ink-3)} .sw input:checked~.st{color:var(--green);font-weight:600}
+  .mtot{font-weight:700}
 </style>
 </head>
 <body>
@@ -83,9 +92,25 @@ let DATA = { grades:[], progress:[] };
 const BANKS = { "d3-exam-product-knowledge-1": ["exams/product-knowledge-1-questions.js", "LMS_PK1"], "exam-product-knowledge-2": ["exams/product-knowledge-2-questions.js", "LMS_PK2"], "exam-product-knowledge-3": ["exams/product-knowledge-3-questions.js", "LMS_PK3"] };
 const SIM_ID = "d4-exam-connect-sim";
 /* Exams hidden on this page for now (built but not on any day; only test attempts). Rows stay in the Sheet. Remove an id to show it again. */
-/* Manual grade color: best = green, worst = red, in between = amber, missed or no grade = grey. */
-const mClass = (id, g) => { const m = (window.LMS_MANUAL || []).find(x => x.id === id), i = m && g ? m.scale.indexOf(g) : -1, sc = m ? m.scale.filter(x => !/^miss/i.test(x)) : [];
-  return "mg" + (i < 0 || /^miss/i.test(g) ? 3 : i === 0 ? 0 : i >= sc.length - 1 ? 2 : 1); };
+/* ---- Manual (trainer-graded) rubrics: see exams/manual-rubrics.js ---- */
+function mScale(m, it){ let sc = (it && typeof it === "object" && it.scale) || (m && m.scale) || []; if (typeof sc === "string") sc = (window.LMS_MANUAL_SCALES || {})[sc] || [];
+  return sc.map(c => typeof c === "string" ? { label: c } : c); }
+function mItems(sec){ return (sec.items || []).map(it => typeof it === "string" ? { label: it } : it); }
+function cText(c){ return c.label || (typeof c.w === "number" ? Math.round(c.w * 100) + "%" : ""); }
+function mNumeric(m){ return !!m && (m.sections || []).some(sec => (sec.items || []).length) && m.sections.every(sec => mItems(sec).every(it => it.pts > 0 && mScale(m, it).length && mScale(m, it).every(c => typeof c.w === "number"))); }
+function mPass(m){ return m && m.pass != null ? m.pass : MARK; }
+/* 0 green, 1 amber, 2 red. With a transmute table: lowest rating red, second lowest amber, others green. Without: pass mark. */
+function mLevel(m, pct){ const t = ((m && m.transmute) || []).slice().sort((a, b) => b[0] - a[0]); if (!t.length) return pct >= mPass(m) ? 0 : 2;
+  const i = t.findIndex(r => pct >= r[0]); return i < 0 || i === t.length - 1 ? 2 : i === t.length - 2 ? 1 : 0; }
+function mTrans(m, pct){ const t = ((m && m.transmute) || []).slice().sort((a, b) => b[0] - a[0]).find(r => pct >= r[0]); return t ? String(t[1]) : ""; }
+/* Grade color. Numeric rubric: pass mark green, below red. Label rubric: best = green, worst = red, in between = amber, missed or none = grey. */
+function mClass(id, g){ const m = (window.LMS_MANUAL || []).find(x => x.id === id);
+  if (mNumeric(m)) { const p = /([\d.]+)%\)?\s*$/.exec(String(g || "")); return "mg" + (!p ? 3 : mLevel(m, +p[1])); }
+  const labs = mScale(m).map(cText), i = m && g ? labs.indexOf(g) : -1, sc = labs.filter(x => !/^miss/i.test(x));
+  return "mg" + (i < 0 || /^miss/i.test(g) ? 3 : i === 0 ? 0 : i >= sc.length - 1 ? 2 : 1); }
+/* Who sees a requirement in My grades, per batch. Settings "manualHide.<id>.<batch>" = "on" hidden / "off" shown; not set = the older
+   all-batches key "manualHide.<id>" decides (on = hidden). */
+function mHidden(id, batch){ const b = LMS.setting("manualHide." + id + "." + batch, ""); return b === "on" ? true : b === "off" ? false : LMS.setting("manualHide." + id, "") === "on"; }
 let MSEL = { r: "", p: "" };   // manual grading: picked requirement + person (kept across reloads)
 const HIDDEN = ["exam-acqui-activities", "exam-acqui-onboarding", "exam-acqui-nav"];
 const shown = r => !String(r["Exam ID"]).startsWith("TEST-") && !HIDDEN.includes(String(r["Exam ID"]));
@@ -229,10 +254,11 @@ function render(){
     </tbody></table></div>
 
     <h2 class="sec">Manual grading</h2>
-    <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Only admins and the person graded (in their My grades) see them. Saving again keeps the old version and shows the newest.</p>
+    <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the switch for their batch is on (green). Saving again keeps the old version and shows the newest.</p>
     ${MAN.length ? `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement">${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
       <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select>
-      <label class="small" title="Off = AMs don't see this requirement in their My grades. Admins always see it."><input type="checkbox" id="mvis"> AMs can see this grade</label><span class="small muted" id="mvmsg"></span></div>
+</div>
+    <div class="vis" id="mvis"></div>
     <div id="mform"></div><div id="mlist" style="margin-top:14px"></div>` : '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>'}
 
     <h2 class="sec">Overall</h2><p class="muted small" style="margin:0 0 10px">Average best score per exam for the selected batch. The dark line is the pass mark.</p>
@@ -377,46 +403,72 @@ function render(){
       if (open && !d.innerHTML) d.innerHTML = detail(T[b.dataset.it - 1]); d.hidden = !open; b.setAttribute("aria-expanded", open); });
   };
   /* ---- Manual grading form ---- */
-  const hideKey = id => "manualHide." + id;
-  const mVis = () => { if (!$("mvis")) return; $("mvis").checked = LMS.setting(hideKey($("mr").value), "") !== "on"; };
+  const visBatches = [...new Set([...batches, ...mrows.map(r => r.Batch).filter(Boolean)])].sort();
+  const mVis = () => { if (!$("mvis")) return; const id = $("mr").value;
+    $("mvis").innerHTML = `<span class="small"><b>Visible to AMs</b></span>` + visBatches.map(b => { const on = !mHidden(id, b);
+      return `<label class="sw" title="On = batch ${esc(b)} sees this in My grades. Admins always see it."><input type="checkbox" data-vb="${esc(b)}" ${on ? "checked" : ""}><i></i>Batch ${esc(b)} <span class="st">${on ? "Shown" : "Hidden"}</span></label>`; }).join("") + `<span class="small muted" id="mvmsg"></span>`;
+    $("mvis").querySelectorAll("[data-vb]").forEach(cb => cb.onchange = async () => { const b = cb.dataset.vb, on = cb.checked, st = cb.parentNode.querySelector(".st");
+      cb.disabled = true; st.textContent = "Saving…";
+      const r = await LMS.setSetting("manualHide." + id + "." + b, on ? "off" : "on").catch(() => null); cb.disabled = false;
+      if (r && r.ok) { st.textContent = on ? "Shown" : "Hidden"; $("mvmsg").textContent = ""; }
+      else { cb.checked = !on; st.textContent = !on ? "Shown" : "Hidden"; $("mvmsg").textContent = "Couldn't save. Try again."; } }); };
+  const fmtN = x => String(Math.round(x * 100) / 100);
+  /* numeric rubric: points per item from the picked choices */
+  const mCalc = m => { let score = 0, max = 0, all = true;
+    m.sections.forEach((sec, si) => mItems(sec).forEach((it, ii) => { const sc = mScale(m, it), v = ($("mg" + si + "_" + ii) || {}).value || "", c = sc.find(x => cText(x) === v);
+      if ($("mx" + si + "_" + ii) && !$("mx" + si + "_" + ii).checked) return;   // switched off: left out of the total
+      max += it.pts; if (c) score += it.pts * c.w; else all = false; }));
+    const pct = max ? Math.round(score / max * 1000) / 10 : 0; return { score: Math.round(score * 100) / 100, max, pct, all, t: mTrans(m, pct) }; };
+  const mTotal = m => { if (!$("mtot")) return; const c = mCalc(m);
+    const lv = mLevel(m, c.pct), tag = c.t || (lv ? "Below " + mPass(m) + "%" : "Pass");
+    $("mtot").innerHTML = `${fmtN(c.score)} / ${fmtN(c.max)} points (${c.pct}%) <span class="pill mg${lv}">${esc(tag)}</span>${c.all ? "" : ' <span class="small muted" style="font-weight:400">(not every item graded yet)</span>'}`; };
   const mDraw = () => { if (!$("mr")) return; mVis();
-    const m = manOf($("mr").value), e = $("mp").value, prev = e ? mlast[e + "|" + m.id] : null;
+    const m = manOf($("mr").value), e = $("mp").value, prev = e ? mlast[e + "|" + m.id] : null, num = mNumeric(m);
     let old = null; try { old = prev ? JSON.parse(prev.Items || "") : null; } catch (er) {}
     const oldOf = (si, ii) => (old && old.sections && old.sections[si] && old.sections[si].items[ii]) || [];
-    const gsel = (id, v, req) => `<select id="${id}"><option value="">${req ? "Pick" : "—"}</option>${m.scale.map(g => `<option ${g === v ? "selected" : ""} title="${esc((m.help || {})[g] || "")}">${esc(g)}</option>`).join("")}</select>`;
-    const help = m.help ? `<p class="small muted" style="margin:0 0 8px">${m.scale.map(g => `<b>${esc(g)}</b>: ${esc(m.help[g] || "")}`).join(" · ")}</p>` : "";
+    const gsel = (id, v, sc, req, pts) => `<select id="${id}"><option value="">${req ? "Pick" : "—"}</option>${sc.map(c => { const t = cText(c);
+      return `<option value="${esc(t)}" ${t === v ? "selected" : ""} title="${esc((m.help || {})[t] || "")}">${esc(t)}${pts && typeof c.w === "number" ? " · " + fmtN(pts * c.w) + " pts" : ""}</option>`; }).join("")}</select>`;
+    const sc0 = mScale(m), same = m.sections.every(sec => mItems(sec).every(it => !it.scale));
+    const help = m.help ? `<p class="small muted" style="margin:0 0 8px">${sc0.map(c => `<b>${esc(cText(c))}</b>: ${esc(m.help[cText(c)] || "")}`).join(" · ")}</p>`
+      : num && same ? `<p class="small muted" style="margin:0 0 8px">${sc0.map(c => `<b>${esc(cText(c))}</b> = ${Math.round(c.w * 100)}%`).join(" · ")} of the item's points. ${m.transmute ? "Rating: " + m.transmute.slice().sort((a, b) => b[0] - a[0]).map(r => esc(r[1]) + " " + r[0] + "%+").join(" · ") : "Pass mark " + mPass(m) + "%"}. Switch off "Count" to leave an item out of the total.</p>` : "";
     $("mform").innerHTML = !e ? '<p class="muted small">Pick an onboardee to grade.</p>' : `${prev ? `<p class="small" style="margin:0 0 8px">Last saved ${esc(when(prev.Timestamp))} by ${esc(prev["Graded by"] || "")}. Shown below; saving makes a new version.</p>` : ""}${help}
-      <div class="scroll"><table class="tbl mtbl"><thead><tr><th>Item</th><th>Grade</th><th>Note (optional)</th></tr></thead><tbody>
-      ${m.sections.map((sec, si) => (sec.title ? `<tr><td class="sec" colspan="3">${esc(sec.title)}</td></tr>` : "") + sec.items.map((it, ii) => { const o = oldOf(si, ii);
-        return `<tr><td>${esc(it)}</td><td>${gsel("mg" + si + "_" + ii, o[1])}</td><td><textarea id="mn${si}_${ii}" rows="1">${esc(o[2] || "")}</textarea></td></tr>`; }).join("")).join("")}
-      <tr><td class="sec">Overall${m.overall === "required" ? "" : " (optional)"}</td><td class="sec">${gsel("mog", old ? old.overall : "", m.overall === "required")}</td><td class="sec"></td></tr>
+      <div class="scroll"><table class="tbl mtbl"><thead><tr>${num ? '<th title="Off = this item is left out of the total">Count</th>' : ""}<th>Item</th><th>Grade</th><th>Note (optional)</th></tr></thead><tbody>
+      ${m.sections.map((sec, si) => (sec.title ? `<tr><td class="sec" colspan="${num ? 4 : 3}">${esc(sec.title)}</td></tr>` : "") + mItems(sec).map((it, ii) => { const o = oldOf(si, ii);
+        return `<tr>${num ? `<td><label class="sw" title="Off = left out of the total"><input type="checkbox" id="mx${si}_${ii}" ${o[5] ? "" : "checked"}><i></i></label></td>` : ""}<td>${esc(it.label)}${it.pts ? ` <span class="muted small">(${fmtN(it.pts)} pts)</span>` : ""}</td><td>${gsel("mg" + si + "_" + ii, o[5] ? "" : o[1], mScale(m, it), num, it.pts)}</td><td><textarea id="mn${si}_${ii}" rows="1">${esc(o[2] || "")}</textarea></td></tr>`; }).join("")).join("")}
+      ${num ? `<tr><td class="sec"></td><td class="sec">Total</td><td class="sec mtot" id="mtot" colspan="2"></td></tr>`
+        : `<tr><td class="sec">Overall${m.overall === "required" ? "" : " (optional)"}</td><td class="sec">${gsel("mog", old ? old.overall : "", sc0, m.overall === "required")}</td><td class="sec"></td></tr>`}
       </tbody></table></div>
       <p class="small" style="margin:12px 0 4px"><b>Overall notes</b> <span class="muted">(new lines are kept)</span></p><textarea id="mon" rows="5">${esc(old ? old.note || "" : "")}</textarea>
       <div class="bar"><button class="btn primary sm" id="msave">Save grade</button><span class="small muted" id="mmsg"></span></div>`;
-    if (e) $("msave").onclick = mSave;
+    if (e) { $("msave").onclick = mSave; if (num) {
+      const sync = () => { $("mform").querySelectorAll("[id^=mx]").forEach(x => { const g = $("mg" + x.id.slice(2)); g.disabled = !x.checked; x.closest("tr").style.opacity = x.checked ? "" : ".5"; }); mTotal(m); };
+      $("mform").querySelectorAll("select, [id^=mx]").forEach(x => x.onchange = sync); sync(); } }
     mList(); };
   const mList = () => { const id = $("mr").value, list = Object.values(mlast).filter(r => r["Rubric ID"] === id && (!batchSel || (r.Batch || bOf(r.Email)) === batchSel)).sort((a, b) => String(b.Timestamp).localeCompare(String(a.Timestamp)));
     $("mlist").innerHTML = list.length ? `<div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Onboardee</th><th>Overall</th><th>Graded by</th><th>Details</th></tr></thead><tbody>${list.map(r => `<tr><td class="small muted" style="white-space:nowrap">${esc(when(r.Timestamp))}</td><td><b>${esc(r.Name || nameOf(r.Email))}</b><div class="small muted">${esc(r.Email)}</div></td><td>${mPill(id, r)}</td><td class="small">${esc(r["Graded by"] || "")}</td><td class="small" style="white-space:pre-line;min-width:260px">${esc(String(r.Details || "").replace(/^'/, ""))}</td></tr>`).join("")}</tbody></table></div>` : '<p class="muted small">Nobody graded yet for this requirement' + (batchSel ? " in this batch" : "") + ".</p>"; };
-  const mSave = async () => { const m = manOf($("mr").value), e = $("mp").value, v = id => ($(id) || {}).value || "";
-    const sections = m.sections.map((sec, si) => ({ title: sec.title, items: sec.items.map((it, ii) => [it, v("mg" + si + "_" + ii), v("mn" + si + "_" + ii).trim()]) }));
-    const overall = v("mog"), note = v("mon").trim(), any = sections.some(x => x.items.some(i => i[1] || i[2]));
-    if (m.overall === "required" && !overall) { $("mmsg").textContent = "Pick the overall grade first."; return; }
+  const mSave = async () => { const m = manOf($("mr").value), e = $("mp").value, v = id => ($(id) || {}).value || "", num = mNumeric(m);
+    const sections = m.sections.map((sec, si) => ({ title: sec.title, items: mItems(sec).map((it, ii) => { const g = v("mg" + si + "_" + ii), row = [it.label, g, v("mn" + si + "_" + ii).trim()];
+      if (num) { const off = !$("mx" + si + "_" + ii).checked, c = mScale(m, it).find(x => cText(x) === g);
+        if (off) row[1] = ""; row.push(!off && c ? Math.round(it.pts * c.w * 100) / 100 : 0, it.pts, off ? 1 : 0); } return row; }) }));
+    const note = v("mon").trim(), any = sections.some(x => x.items.some(i => i[1] || i[2])), calc = num ? mCalc(m) : null;
+    let overall = num ? "" : v("mog");
+    if (num) { if (!calc.all) { $("mmsg").textContent = "Grade every item first."; return; } overall = (calc.t ? calc.t + " (" + calc.pct + "%)" : calc.pct + "%"); }
+    else if (m.overall === "required" && !overall) { $("mmsg").textContent = "Pick the overall grade first."; return; }
     if (!any && !overall && !note) { $("mmsg").textContent = "Nothing to save yet."; return; }
-    const details = [overall ? "Overall: " + overall : "", note ? "Overall notes: " + note : ""].filter(Boolean).join("\n") + "\n" +
-      sections.map(x => (x.title ? x.title + "\n" : "") + x.items.map(i => "- " + i[0] + ": " + (i[1] || "—") + (i[2] ? " (" + i[2] + ")" : "")).join("\n")).join("\n");
+    const head = num ? ["Score: " + fmtN(calc.score) + " / " + fmtN(calc.max) + " (" + calc.pct + "%)" + (calc.t ? "\nRating: " + calc.t : "")] : [overall ? "Overall: " + overall : ""];
+    const details = [...head, note ? "Overall notes: " + note : ""].filter(Boolean).join("\n") + "\n" +
+      sections.map(x => (x.title ? x.title + "\n" : "") + x.items.map(i => "- " + i[0] + ": " + (num && i[5] ? "not counted" : (i[1] || "—") + (num ? " = " + fmtN(i[3]) + "/" + fmtN(i[4]) + " pts" : "")) + (i[2] ? " (" + i[2] + ")" : "")).join("\n")).join("\n");
     $("msave").disabled = true; $("mmsg").textContent = "Saving…";
     const u = LMS.user() || {}, res = await fetch(LMS.config.backendUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action: "saveManual", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "",
-        email: e, name: nameOf(e), batch: bOf(e), id: m.id, overall, details: details.trim(), items: JSON.stringify({ manual: 1, title: m.title, sections, overall, note }) } }) }).then(x => x.json()).catch(() => null);
+        email: e, name: nameOf(e), batch: bOf(e), id: m.id, overall, details: details.trim(),
+        items: JSON.stringify({ manual: 1, title: m.title, sections, overall, note, ...(num ? { score: calc.score, max: calc.max, pct: calc.pct, transmuted: calc.t } : {}) }) } }) }).then(x => x.json()).catch(() => null);
     if (res && res.ok) { $("mmsg").textContent = "Saved. Reloading…"; MSEL = { r: m.id, p: e }; load(sessionStorage.getItem("amhub.adminpc") || ""); }
     else { $("msave").disabled = false; $("mmsg").textContent = !res ? "Couldn't reach the Sheet." : res.error === "unknown-action" ? "The Apps Script needs to be redeployed first (New version)." : "Couldn't save (" + res.error + ")."; } };
   if ($("mr")) { if (MSEL.r && manOf(MSEL.r)) $("mr").value = MSEL.r; if ([...$("mp").options].some(o => o.value === MSEL.p)) $("mp").value = MSEL.p;
     $("mr").onchange = () => { MSEL.r = $("mr").value; mDraw(); };
     LMS.loadSettings().then(mVis).catch(() => {});
-    $("mvis").onchange = async () => { const id = $("mr").value, on = $("mvis").checked; $("mvis").disabled = true; $("mvmsg").textContent = "Saving…";
-      const r = await LMS.setSetting(hideKey(id), on ? "" : "on").catch(() => null); $("mvis").disabled = false;
-      if (r && r.ok) $("mvmsg").textContent = on ? "AMs can see it." : "Hidden from AMs.";
-      else { $("mvis").checked = !on; $("mvmsg").textContent = "Couldn't save. Try again."; } }; $("mp").onchange = () => { MSEL.p = $("mp").value; mDraw(); }; mDraw(); }
+    $("mp").onchange = () => { MSEL.p = $("mp").value; mDraw(); }; mDraw(); }
   $("app").querySelectorAll("[data-medit]").forEach(b => b.onclick = () => { const [em, id] = b.dataset.medit.split("|"); MSEL = { r: id, p: em };
     if ($("mr")) { $("mr").value = id; if (![...$("mp").options].some(o => o.value === em)) $("mp").insertAdjacentHTML("beforeend", `<option value="${esc(em)}">${esc(nameOf(em))}</option>`); $("mp").value = em; mDraw(); $("mr").scrollIntoView({ behavior: "smooth", block: "center" }); } });
   if ([...$("ix").options].some(o => o.value === keepIx)) $("ix").value = keepIx; $("isort").value = keepSort;
@@ -443,7 +495,7 @@ async function loadMine(){
 const honorOf = r => { const m = /^Honor code: (.*?)(?: \| |$)/.exec(String(r.Details || "")); return m ? "Taken by: " + m[1] : ""; };
 let MINE_MAN = [];   // the person's own manual (trainer-graded) results, latest per requirement shown
 function drawMine(grades, note, retry){
-  const ml = {}; MINE_MAN.filter(r => LMS.setting("manualHide." + r["Rubric ID"], "") !== "on").sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => ml[r["Rubric ID"]] = r);
+  const ml = {}; MINE_MAN.filter(r => !mHidden(r["Rubric ID"], LMS.batchOf((LMS.user() || {}).email) || r.Batch || "")).sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => ml[r["Rubric ID"]] = r);
   const man = Object.values(ml), manHtml = man.length ? `<h2 class="sec">Trainer-graded</h2><div class="scroll"><table class="tbl"><thead><tr><th>Requirement</th><th>Grade</th><th>When</th><th>Details</th></tr></thead><tbody>
       ${man.map(r => `<tr><td><b>${esc(nice(r["Rubric ID"]))}</b></td><td><span class="pill ${mClass(r["Rubric ID"], r.Overall)}">${esc(r.Overall || "Graded")}</span></td><td class="small muted" style="white-space:nowrap">${esc(when(r.Timestamp))}</td><td class="small" style="white-space:pre-line;min-width:260px">${esc(String(r.Details || "").replace(/^'/, ""))}</td></tr>`).join("")}</tbody></table></div>` : "";
   const rows = grades.filter(shown).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));

@@ -174,7 +174,7 @@ function doPost(e) {
     if (req.action === "myGrades") {
       const mine = function (r) { return String(r.Email).toLowerCase() === user.email; };
       return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }),
-        manual: readRows_(MANUAL_SHEET).filter(mine).filter(function (r) { return setting_("manualHide." + r["Rubric ID"]) !== "on"; })   // admins can hide a requirement from AMs (Grades page toggle)
+        manual: readRows_(MANUAL_SHEET).filter(mine).filter(function (r) { return !manualHidden_(r["Rubric ID"], user.batch || String(r.Batch || "").replace(/[^0-9]/g, "")); })   // admins switch each requirement on/off per batch (Grades page)
           .map(function (r) { delete r.Items; return r; }) });   // their own trainer-graded results only
     }
     if (req.action === "adminData") {
@@ -585,6 +585,11 @@ function audit_(by, action, target, before, after) {
 }
 
 /** A value from the Settings tab, cached 30s (used on every request). */
+// Manual grades shown to AMs per batch: Settings "manualHide.<id>.<batch>" = "on" hidden / "off" shown; not set = "manualHide.<id>" (on = hidden for all).
+function manualHidden_(id, batch) {
+  const b = setting_("manualHide." + id + "." + batch);
+  return b === "on" ? true : b === "off" ? false : setting_("manualHide." + id) === "on";
+}
 function setting_(key) {
   const cache = CacheService.getScriptCache(); let all = null; const hit = cache.get("settings_v1");
   if (hit) all = JSON.parse(hit);
