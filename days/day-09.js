@@ -1,7 +1,7 @@
 /* Day 9. Edit only this file to change this day (see modules.js for the fields). */
 LMS_DAY_DEFS[9] = {
   opens: { "110926": "2026-11-19" },   // batch 110926: stays locked until this date (Manila time), even if Day 8 is done
-  title: "Role-Play Assessment",
+  title: "Live Discovery Call Simulation",
   titles: { "110926": "Acqui Service Training" },   // batch 110926 sees this day name instead of title
   brief: "Nov 19\n• Review the other Acqui Service functions at your own pace\n• Guided demos and practice: log a call, log a meeting\n• Graded Acqui Service exam",
   materialsTitle: "Learning Materials",

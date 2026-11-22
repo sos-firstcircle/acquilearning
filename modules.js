@@ -61,5 +61,6 @@ window.LMS_SESSIONS = [
   { id:"s-d6-self", batch:"110926", title:"Day 6: Onboarding [Self Pace] - Navigate Acqui Service Demo", when:"2026-11-19T09:00", minutes:165, room:"", link:"", desc:"" },
   { id:"s-d6-virtual", batch:"110926", title:"Day 6: Onboarding [Virtual] - ACQ SVC Continuation and Simulation Exam", when:"2026-11-19T14:00", minutes:210, room:"", link:"https://meet.google.com/hmv-qkqk-nfr", desc:"" },
   { id:"s-d7-discussion", batch:"110926", title:"Day 7: Onboarding [Virtual] - Prospecting Call Discussion", when:"2026-11-20T10:00", minutes:120, room:"", link:"https://meet.google.com/mtv-mhar-bgx", desc:"" },
-  { id:"s-d7-sim", batch:"110926", title:"Day 7: Onboarding [Virtual] - Prospecting Call Live Simulation Exam", when:"2026-11-20T14:30", minutes:150, room:"", link:"https://meet.google.com/kuj-nnrr-tsv", desc:"" }
+  { id:"s-d7-sim", batch:"110926", title:"Day 7: Onboarding [Virtual] - Prospecting Call Live Simulation Exam", when:"2026-11-20T14:30", minutes:150, room:"", link:"https://meet.google.com/kuj-nnrr-tsv", desc:"" },
+  { id:"s-d11-discovery", batch:"110926", title:"Day 11: Onboarding [Virtual] - Discovery Meeting Discussion", when:"2026-11-23T14:00", minutes:120, room:"", link:"https://meet.google.com/ncw-pkgv-dax", desc:"" }
 ];

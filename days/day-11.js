@@ -7,5 +7,6 @@ LMS_DAY_DEFS[11] = {
   tasks: [
     { id: "d11-discovery-call-sim", label: "Finish the Discovery Call Simulation with Reyster" }
   ],
+  sessions: ["s-d11-discovery"],   // Nov 23, 2-4pm; ids from LMS_SESSIONS in modules.js
   materials: []
 };
