@@ -191,7 +191,8 @@ function gate(msg){
 
 async function load(passcode){
   $("app").innerHTML = '<h1>Grades</h1><p class="muted">Loading from the Sheet…</p>';
-  const res = await LMS.adminData(passcode);
+  const [res, ppl] = await Promise.all([LMS.adminData(passcode), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null]);   // People/Batches tabs: batches made in Settings
+  if (res && res.ok && ppl && ppl.ok) { res.people = ppl.people || []; res.batchList = (ppl.batches || []).map(b => b.batch).filter(Boolean); }
   if (!res || !res.ok) {
     const e = res && res.error;
     if (e === "passcode-required") return gate(passcode ? "Wrong passcode." : "");
@@ -206,10 +207,11 @@ function render(){
   const bn = v => (v === "" || v == null) ? "" : String(v).padStart(6, "0");   // Sheets may drop leading zeros
   [].concat(DATA.grades || [], DATA.progress || []).forEach(r => { const e = String(r.Email || "").toLowerCase(); if (/\+[^@]*@/.test(e) && r.Name) CODED[e] = String(r.Name); });
   const g = DATA.grades.filter(shown).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
-  const bOf = e => LMS.batchOf(e) || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
+  const PB = {}; (DATA.people || []).forEach(p => { if (p.active && p.batch && !(p.access || []).some(a => /^admin$/i.test(a))) PB[String(p.email).toLowerCase()] = bn(p.batch); });   // People tab (Settings)
+  const bOf = e => LMS.batchOf(e) || PB[e] || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());
-  const allLearners = [...new Set([ ...R.learners.map(e=>e.toLowerCase()), ...g.map(r=>r.Email) ])].filter(e => !admins.includes(e));
-  const batches = [...new Set([ ...Object.keys(R.batches), ...g.map(r => r.Batch).filter(Boolean) ])].sort();   // roster batches plus any in the Sheet
+  const allLearners = [...new Set([ ...R.learners.map(e=>e.toLowerCase()), ...Object.keys(PB), ...g.map(r=>r.Email) ])].filter(e => !admins.includes(e));
+  const batches = [...new Set([ ...Object.keys(R.batches), ...(DATA.batchList || []).map(bn), ...Object.values(PB), ...g.map(r => r.Batch).filter(Boolean) ])].sort();   // roster.js, Batches/People tabs, and any in the Grades tab
   const keepIx = $("ix") ? $("ix").value : "", keepSort = $("isort") ? $("isort").value : "order";
   const batchSel = $("bf") ? $("bf").value : "", keepQ = $("q") ? $("q").value : "", keepEx = $("ex") ? $("ex").value : "";
   const learners = allLearners.filter(e => !batchSel || bOf(e) === batchSel);
