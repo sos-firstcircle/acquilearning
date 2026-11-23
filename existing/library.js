@@ -12,9 +12,13 @@ const LIBRARY_GROUPS = [
   { title: "First Circle General Notion Links", items: [
     { label: "Acquisition @ First Circle", href: "https://app.notion.com/p/firstcircle/Acquisition-First-Circle-87df90fc3c9d48c7984f1dfcd3d76047" },
     { label: "First Circle Home (Notion)", href: "https://app.notion.com/p/firstcircle/First-Circle-Home-911987b5def34044a7faa5ee3703e69c" },
-    { label: "Transportation to and from client meetings", href: "https://app.notion.com/p/firstcircle/Transportation-to-and-from-Client-Meetings-44fb796bbb28458b90128ce1866ddcef" },
+    { label: "Grab Policy", href: "https://app.notion.com/p/firstcircle/Transportation-to-and-from-Client-Meetings-44fb796bbb28458b90128ce1866ddcef" },
     { label: "Employee expenses reimbursements policy", href: "https://app.notion.com/p/firstcircle/Employee-Expenses-Reimbursements-Policy-d4836ab53ea8439493a3c3adf1e77c6e" },
-    { label: "Macbook Basics", href: "lessons/d01-mac-basics.html" }
+    { label: "Macbook Basics", href: "lessons/d01-mac-basics.html" },
+    { label: "Meeting room reservation", href: "https://app.notion.com/p/firstcircle/Meeting-Room-Reservations-a679d057b25e426b8f12e6702f0639bd" }
+  ]},
+  { title: "People", items: [
+    { label: "Legal Request App", href: "https://fcinnercircle.vercel.app/login" }
   ]},
   { title: "Outbound Prospecting", items: [
     { label: "ACQ Platform-based Selling: Outbound Prospecting (Notion)", href: "https://app.notion.com/p/firstcircle/ACQ-Platform-based-Selling-Outbound-Prospecting-1d51a5890448805f85dbefb7ea8e670c" },
