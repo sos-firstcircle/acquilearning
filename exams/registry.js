@@ -10,5 +10,6 @@ window.LMS_EXAM_LIST = [
   { group: "simulation", id: "d5-acqui-practice", title: "Find your way around Acqui Service", where: "Day 5", type: "Practice, 15 situational tasks (click, type, pick). Not graded", href: "sims/acqui-tour-exam.html" },
   { group: "simulation", id: "d5-reassign-practice", title: "Lead reassignment and creation in Acqui Service", where: "Day 5", type: "Practice, 5 situations in the Acqui Service sim: 3 lead requests (1 should be refused) and 2 new leads, with DTI/SEC lookups. Not graded", href: "sims/acqui-reassign-exam.html" },
   { group: "simulation", id: "d5-referrer-practice", title: "Registering a referrer in Slack", where: "Day 5", type: "Practice in a Slack look-alike: /regularnew, the form, ID and proof of bank account. Scored out of 100, not graded", href: "sims/slack-referrer-practice.html" },
+  { group: "other", id: "d2-exam-business-card", title: "Business Card & Contact Details", where: "Day 2 (all batches except 110926)", type: "Required form: name, work phone, home address, then a summary to acknowledge. Always 100%", href: "lessons/d02-exam-business-card.html" },
   { group: "other", id: "d1-exam-responsible-selling", title: "Foundations of Responsible Selling", where: "Day 1", type: "Agree to 16 statements", href: "lessons/d01-exam-responsible-selling.html" }
 ];

@@ -1,0 +1,106 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Business Card & Contact Details</title>
+<link rel="stylesheet" href="../shared/theme.css"><script src="../shared/lms.js"></script>
+<style>
+body{height:auto;background:var(--mist)}.pg{max-width:760px;margin:0 auto;padding:28px 20px 40px}
+.back{display:inline-flex;font-weight:600;font-size:14px;text-decoration:none;margin-bottom:18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r-lg);padding:28px 32px}
+h1{font-size:28px;margin:0 0 4px;color:var(--deep)}.lede{color:var(--ink-2);margin:0 0 18px}
+.q{border:2px solid var(--line);border-radius:14px;padding:18px 20px;margin-top:16px}
+.q.bad{border-color:var(--coral);background:#FEF6F8}
+.q h3{margin:0 0 4px;font-size:17px;color:var(--deep);display:flex;gap:10px;align-items:center}
+.n{width:28px;height:28px;border-radius:50%;background:var(--deep);color:#fff;display:grid;place-items:center;font-weight:700;font-size:14px;flex:none}
+.hint{margin:0 0 10px;font-size:13px;color:var(--ink-2)}
+.req{color:var(--coral);font-weight:700}.opt{font-weight:500;font-size:12px;color:var(--ink-3);background:var(--mist);border-radius:999px;padding:1px 9px}
+label.l{display:block;font-size:13px;font-weight:600;margin:10px 0 4px;color:var(--ink-2)}
+input[type=text],input[type=tel],textarea{width:100%;padding:11px 13px;border:1px solid #C9D6D8;border-radius:10px;font:inherit;font-size:15px;background:#fff}
+input:focus,textarea:focus{outline:2px solid var(--teal);outline-offset:1px}
+.err{display:none;margin-top:6px;font-size:13px;color:var(--coral)}.q.bad .err{display:block}.q:not(.bad) .err{display:none}
+.bar{display:flex;gap:12px;align-items:center;justify-content:flex-end;flex-wrap:wrap;margin-top:22px}
+.btn{background:var(--teal);color:#fff;border:0;border-radius:8px;padding:12px 22px;font-weight:700;font-size:15px;cursor:pointer;text-decoration:none;display:inline-block}.btn:disabled{background:#B8C6C9;cursor:not-allowed}
+.btn.alt{background:#fff;color:var(--deep);border:2px solid var(--line)}
+.sum{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:14px}
+.sum div{display:grid;grid-template-columns:200px 1fr;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line);font-size:15px}.sum div:last-child{border-bottom:0}
+.sum dt{font-weight:600;color:var(--ink-2);font-size:14px}.sum dd{margin:0;white-space:pre-wrap;word-break:break-word}.sum .key{background:var(--teal-soft)}
+.warn{background:var(--marigold-soft);border-radius:10px;padding:12px 16px;font-size:14px;margin-top:14px}
+.ack{display:flex;gap:10px;align-items:flex-start;margin-top:16px;cursor:pointer;font-size:15px;font-weight:600}.ack input{margin-top:4px}
+.ok3{background:var(--green-soft);border:2px solid var(--green);border-radius:14px;padding:22px;margin-bottom:22px;text-align:center}
+.ok3 .tick{width:56px;height:56px;border-radius:50%;background:var(--green);color:#fff;display:grid;place-items:center;margin:0 auto 10px;font-size:30px;font-weight:700}
+.ok3 h2{margin:0 0 4px;color:var(--deep);font-size:22px}.ok3 .sc3{font-size:34px;font-weight:800;color:var(--green);margin:6px 0}.ok3 p{margin:2px 0;color:var(--ink-2);font-size:14px}
+.ok3 .row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+.checking #step1,.checking #step2{display:none}.chk{display:none;color:var(--ink-2);font-size:14px;margin:18px 0}.checking .chk{display:block}
+@media(max-width:600px){.card{padding:20px}.sum div{grid-template-columns:1fr;gap:2px}}
+</style></head><body class="checking">
+<div class="pg"><a class="back" href="../dashboard.html?day=2">← Back to dashboard</a>
+<div class="card"><div id="doneMsg"></div><p class="chk">Checking your progress…</p>
+<h1>Business Card & Contact Details</h1><p class="lede">Required. Answer every question marked <span class="req">*</span>. There are no wrong answers; this is not scored.</p>
+
+<div id="step1">
+<section class="q" id="q1"><h3><span class="n">1</span>Name for your business card <span class="req">*</span></h3><p class="hint">Exactly how it should be printed.</p>
+<input type="text" id="name" maxlength="80" autocomplete="off" placeholder="e.g. Juan Dela Cruz" aria-label="Name for business card"><div class="err" id="e1">Please enter the name for your business card.</div></section>
+
+<section class="q" id="q2"><h3><span class="n">2</span>Work phone number <span class="req">*</span></h3><p class="hint">Format: +63 xxx xxx xxxx</p>
+<input type="tel" id="ph1" inputmode="numeric" autocomplete="off" placeholder="+63 9xx xxx xxxx" aria-label="Work phone number"><div class="err" id="e2">Enter the full number as +63 xxx xxx xxxx (10 digits after +63).</div>
+<label class="l" for="ph2">Another number <span class="opt">optional</span></label>
+<input type="tel" id="ph2" inputmode="numeric" autocomplete="off" placeholder="+63 9xx xxx xxxx"><div class="err" id="e2b">If you add a second number, enter it as +63 xxx xxx xxxx.</div></section>
+
+<section class="q" id="q3"><h3><span class="n">3</span>Home address <span class="req">*</span></h3><p class="hint">House/unit no., street, barangay, city/municipality, province.</p>
+<textarea id="addr" rows="3" maxlength="300" aria-label="Home address"></textarea><div class="err" id="e3">Please enter your home address.</div></section>
+
+<section class="q" id="q4"><h3><span class="n">4</span>Other areas for lead assignment <span class="opt">optional</span></h3><p class="hint">Aside from NCR, are there other regions where you're okay with being assigned leads? Tell us which ones.</p>
+<textarea id="reg" rows="2" maxlength="300" placeholder="e.g. Region III (Central Luzon), CALABARZON. Leave blank if NCR only." aria-label="Other regions"></textarea></section>
+
+<div class="bar"><button class="btn" id="next">Review my answers</button></div>
+</div>
+
+<div id="step2" style="display:none">
+<h2 style="margin:0;font-size:20px;color:var(--deep)">Please check your info</h2>
+<div class="warn"><b>Your name and work number are final.</b> They will be printed on your business card exactly as shown below.</div>
+<dl class="sum" id="sum"></dl>
+<label class="ack"><input type="checkbox" id="ack"><span>I acknowledge that my name and work number above are my final information for my business card.</span></label>
+<div class="bar"><button class="btn alt" id="back">Edit my answers</button><button class="btn" id="submit" disabled>Submit</button></div>
+</div>
+</div></div>
+<script>
+const EXAM_ID="d2-exam-business-card";
+if(!LMS.requireSignIn()) throw 0;
+const $=id=>document.getElementById(id), esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const PHONE=/^\+63 \d{3} \d{3} \d{4}$/, saveKey="amacademy.d2card."+((LMS.user()||{}).email||"");
+// Keep the number in +63 xxx xxx xxxx shape while typing/pasting (accepts 09xx..., 9xx..., +63 9xx...).
+function fmt(v){ let d=String(v).replace(/\D/g,""); if(d.startsWith("63")) d=d.slice(2); else if(d.startsWith("0")) d=d.slice(1); d=d.slice(0,10);
+  const parts=[d.slice(0,3),d.slice(3,6),d.slice(6,10)].filter(Boolean); return d||String(v).trim()==="+"? "+63 "+parts.join(" ").trim() : ""; }
+["ph1","ph2"].forEach(id=>{ const el=$(id); el.addEventListener("input",()=>{ el.value=fmt(el.value).replace(/ $/,el.value.endsWith(" ")?" ":""); });
+  el.addEventListener("focus",()=>{ if(!el.value) el.value="+63 "; }); el.addEventListener("blur",()=>{ if(el.value.trim()==="+63") el.value=""; }); });
+let A={};
+function get(){ return { name:$("name").value.trim(), ph1:$("ph1").value.trim(), ph2:$("ph2").value.trim(), addr:$("addr").value.trim(), reg:$("reg").value.trim() }; }
+function validate(a){ const bad={ q1:!a.name, q2:!PHONE.test(a.ph1), q3:!a.addr }, bad2=a.ph2&&!PHONE.test(a.ph2);
+  Object.entries(bad).forEach(([k,v])=>$(k).classList.toggle("bad",v)); $("e2b").style.display=bad2?"block":"none"; if(bad2) $("q2").classList.add("bad");
+  const first=Object.keys(bad).find(k=>bad[k])||(bad2?"q2":""); if(first) $(first).scrollIntoView({behavior:"smooth",block:"center"}); return !first; }
+function rows(a,all){ const r=[["Name for business card",a.name,1],["Work phone number",a.ph1,1]]; if(a.ph2||all) r.push(["Another number",a.ph2||"None"]);
+  r.push(["Home address",a.addr],["Other areas for lead assignment",a.reg||"NCR only / none given"]); return r; }
+const sumHtml=a=>rows(a,true).map(([k,v,key])=>`<div class="${key?"key":""}"><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join("");
+$("next").onclick=()=>{ const a=get(); if(!validate(a)) return; A=a; $("sum").innerHTML=sumHtml(a); $("ack").checked=false; $("submit").disabled=true; $("step1").style.display="none"; $("step2").style.display="block"; window.scrollTo(0,0); };
+$("back").onclick=()=>{ $("step2").style.display="none"; $("step1").style.display="block"; window.scrollTo(0,0); };
+$("ack").onchange=()=>{ $("submit").disabled=!$("ack").checked; };
+["name","ph1","ph2","addr"].forEach(id=>$(id).addEventListener("input",()=>{ const q=$(id).closest(".q"); if(q) q.classList.remove("bad"); }));
+function showSubmitted(rec,a){
+  const when=rec&&rec.updated?new Date(rec.updated).toLocaleString("en-PH",{dateStyle:"medium",timeStyle:"short"}):"";
+  $("doneMsg").innerHTML=`<div class="ok3"><div class="tick">✓</div><h2>Submitted</h2><div>Your score</div><div class="sc3">100/100</div><p>Your details were recorded${when?" on "+when:""}.</p><div class="row"><a class="btn" href="../dashboard.html?day=2">Back to dashboard</a></div></div>${a?`<h3 style="margin:0;color:var(--deep)">Your answers</h3><dl class="sum">${sumHtml(a)}</dl>`:""}`;
+  $("step1").style.display="none"; $("step2").style.display="none"; document.querySelector("h1").style.display="none"; document.querySelector(".lede").style.display="none"; window.scrollTo(0,0);
+}
+$("submit").onclick=async()=>{
+  if($("submit").disabled) return; $("submit").disabled=true; $("submit").textContent="Submitting…";
+  const details=rows(A,true).map(([k,v])=>k+": "+v).join(" | ");
+  let rec=null; try{ rec=await LMS.saveResult(EXAM_ID,{score:100,max:100,passed:true,details}); }catch(e){}
+  if(!LMS.preview()) try{ localStorage.setItem(saveKey,JSON.stringify(A)); }catch(e){}
+  showSubmitted(rec||LMS.progress()[EXAM_ID],A);
+};
+// Already submitted? (this browser's saved progress right away, otherwise once the Sheet answers)
+let decided=false;
+function decide(){
+  if(decided) return;
+  if(LMS.preview()){ decided=true; document.body.classList.remove("checking"); return; }
+  const q=LMS.progress()[EXAM_ID];
+  if(q&&q.status==="done"){ decided=true; document.body.classList.remove("checking"); let a=null; try{ a=JSON.parse(localStorage.getItem(saveKey)||"null"); }catch(e){} showSubmitted(q,a); }
+}
+decide(); LMS.ready.then(()=>{ decide(); document.body.classList.remove("checking"); }); LMS.syncDone.then(()=>decide());
+</script></body></html>

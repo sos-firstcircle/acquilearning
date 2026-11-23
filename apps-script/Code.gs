@@ -62,7 +62,7 @@ const PROGRESS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Item ID"];
 // Manual grades (trainer-graded call simulations etc.): their own tab. Admins see all (adminData); each person sees only their own (myGrades). Not counted as exams in myProgress.
 const MANUAL_SHEET = "Manual";
 const MANUAL_HEADER = ["Timestamp", "Email", "Name", "Batch", "Rubric ID", "Overall", "Graded by", "Details", "Items"];
-const EXAM_TABS = { "d1-exam-responsible-selling": "D1-1", "d4-exam-connect-sim": "D4-1" };
+const EXAM_TABS = { "d1-exam-responsible-selling": "D1-1", "d2-exam-business-card": "D2-1", "d4-exam-connect-sim": "D4-1" };
 // Site settings (e.g. the trainer name that narrates the Acqui Service tour). One row per setting; admins change them on the Settings page.
 const SETTINGS_SHEET = "Settings";
 const SETTINGS_HEADER = ["Key", "Value", "Updated", "By"];
