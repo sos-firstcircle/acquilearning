@@ -163,8 +163,18 @@ let selected = (+new URLSearchParams(location.search).get('day')) || null;   // 
 /* opens: { "<batch>": "YYYY-MM-DD" } on a day keeps it locked for that batch until midnight Manila time on that date (on top of the normal "finish the day before" rule). */
 // Admins: pick which batch's dashboard to look at (day names, opening dates, sessions). Batch 000002 has its own page (Dashboard (General)).
 const ymd = b => b.slice(4) + b.slice(0, 4);   // MMDDYY -> YYMMDD so batches sort by start date
-const ADMIN_BATCHES = LMS.isAdmin() ? Object.keys((window.LMS_ROSTER || {}).batches || {}).filter(b => b !== "000002").sort((a, b) => ymd(b).localeCompare(ymd(a))) : [];
+const ADMIN_BATCHES = [];   // admins: batches from roster.js plus the Batches tab (Settings), newest first; 000002 has its own page
+const addBatches = list => { list.forEach(x => { if (x && x !== "000002" && !ADMIN_BATCHES.includes(x)) ADMIN_BATCHES.push(x); }); ADMIN_BATCHES.sort((a, b) => ymd(b).localeCompare(ymd(a))); };
+if (LMS.isAdmin()) { addBatches(Object.keys((window.LMS_ROSTER || {}).batches || {})); try { addBatches(JSON.parse(localStorage.getItem("acqui.adminBatchList") || "[]")); } catch (e) {} }
 let adminBatch = (() => { let v = ""; try { v = localStorage.getItem("acqui.adminBatch") || ""; } catch (e) {} return ADMIN_BATCHES.includes(v) ? v : (ADMIN_BATCHES[0] || ""); })();
+if (LMS.isAdmin() && LMS.adminPeople) LMS.adminPeople().then(res => {   // new batches made in Settings show up in the picker
+  if (!res || !res.ok) return; const ids = (res.batches || []).map(x => x.batch);
+  try { localStorage.setItem("acqui.adminBatchList", JSON.stringify(ids)); } catch (e) {}
+  const before = ADMIN_BATCHES.length; addBatches(ids);
+  let v = ""; try { v = localStorage.getItem("acqui.adminBatch") || ""; } catch (e) {}
+  if (ADMIN_BATCHES.includes(v) && v !== adminBatch) adminBatch = v; else if (!adminBatch) adminBatch = ADMIN_BATCHES[0] || "";
+  if (ADMIN_BATCHES.length !== before) render();
+});
 const batchName = b => b === "000000" ? "Test batch (000000)" : b === "000001" ? "Hanna's test batch (000001)" : `Batch ${b} (${new Date(2000 + +b.slice(4), +b.slice(0, 2) - 1, +b.slice(2, 4)).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })})`;
 const viewBatch = e => { const b = adminBatch || LMS.batchOf(e); return (LMS.config.viewAs || {})[b] || b; };   // viewAs in lms.js: a test batch sees another batch's view
 const opensAt = d => { const u = LMS.user(), s = d.opens && d.opens[viewBatch(u && u.email)]; return s ? new Date(s.includes("T") ? s + ":00+08:00" : s + "T00:00:00+08:00") : null; };   // "YYYY-MM-DD" = midnight, "YYYY-MM-DDTHH:MM" = that time (Manila)
