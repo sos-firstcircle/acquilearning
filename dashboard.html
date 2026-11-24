@@ -93,7 +93,10 @@
   .date b{font-size:19px;font-weight:600}
   .sess .t{font-size:14px;font-weight:600;line-height:1.35}
   .sess .w{font-size:13px;color:var(--ink-2)}
-  .sess .links{display:flex;gap:14px;margin-top:4px;font-size:13px}
+  .sess .links{display:flex;gap:14px;margin-top:4px;font-size:13px;align-items:center;flex-wrap:wrap}
+  .joinnow{display:inline-flex;align-items:center;gap:7px;margin-top:8px;text-decoration:none}
+  .joinnow .dot{width:8px;height:8px;border-radius:50%;background:currentColor;animation:joinpulse 1.4s ease-in-out infinite}
+  @keyframes joinpulse{50%{opacity:.3}}
   .sess a{font-weight:600;text-decoration:none}
   .cal-frame{width:100%;height:360px;border:1px solid var(--line);border-radius:var(--r)}
   .cal-link{display:inline-block;margin-top:12px;font-size:13px;font-weight:600;text-decoration:none}
@@ -280,6 +283,9 @@ function dropdown(sel, P){
   return `<div class="drop">${body}${examHtml}${daySessions(sel)}${sel.status==="complete"?`<div class="daydone">${ico("check",16)} ${dayLabel(sel)} complete</div>`:""}${catchBtn(sel)}</div>`;
 }
 
+/* "Join now": from 10 minutes before a session starts until it ends, if it has a meeting link. The page re-checks every 30s, so the button appears and goes away by itself. */
+const isLive = s => { const st = +new Date(s.when), n = Date.now(); return !!s.link && n >= st - 10*60000 && n < st + (s.minutes||60)*60000; };
+const joinNow = s => isLive(s) ? `<div><a class="btn sm primary joinnow" href="${esc(s.link)}" target="_blank" rel="noopener"><span class="dot"></span>Join now</a></div>` : "";
 function sessionTime(s){
   const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`;
@@ -301,7 +307,7 @@ const replyHtml = s => s.cal ? calReply(s) : "";
 function daySessions(sel){
   const mine = mySessions(), list = sessIdsOf(sel).map(id => mine.find(x => x.id === id)).filter(Boolean);
   if (!list.length) return "";
-  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess"><b>${esc(s.title)}</b>
+  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess"><b>${esc(s.title)}</b>${joinNow(s)}
     <div class="small muted">${esc(sessionTime(s))}</div><div class="small muted">Room: ${s.room?esc(s.room):"None"}</div><div class="small muted">Meeting link: ${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:"None"}</div>${s.desc?`<div class="small muted" style="white-space:pre-line">Description: ${esc(s.desc)}</div>`:""}${replyHtml(s)}</div>`).join("")}</div>`;
 }
 
@@ -311,7 +317,7 @@ function sessionsHtml(){
   else {
     const now = new Date();
     const lockedIds = LMS.isAdmin() ? [] : compute().days.filter(d => d.status === "locked" && !d.held).flatMap(sessIdsOf);   // a session on a locked day stays hidden until that day opens (admins see all)
-    const up = mySessions().filter(s => !lockedIds.includes(s.id)).map(s => ({...s, d:new Date(s.when)})).filter(s => s.d >= now).sort((a,b)=>a.d-b.d).slice(0,4);
+    const up = mySessions().filter(s => !lockedIds.includes(s.id)).map(s => ({...s, d:new Date(s.when)})).filter(s => s.d.getTime() + (s.minutes||60)*60000 > now).sort((a,b)=>a.d-b.d).slice(0,4);
     const g = x => x.getFullYear()+String(x.getMonth()+1).padStart(2,"0")+String(x.getDate()).padStart(2,"0")+"T"+String(x.getHours()).padStart(2,"0")+String(x.getMinutes()).padStart(2,"0")+"00";
     h = up.length ? `<ul class="sess">${up.map(s => {
       const end = new Date(s.d.getTime()+(s.minutes||60)*60000);
@@ -319,7 +325,7 @@ function sessionsHtml(){
       const time = s.d.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})+" to "+end.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
       return `<li><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
         <div><div class="t">${esc(s.title)}</div><div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>${s.room?`<div class="w">Room: ${esc(s.room)}</div>`:""}${s.desc?`<details class="more"><summary>See details</summary><div class="w" style="white-space:pre-line">${esc(s.desc)}</div></details>`:""}
-        <div class="links">${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}${s.cal?"":`<a href="${add}" target="_blank" rel="noopener">Add to calendar</a>`}</div>${replyHtml(s)}</div></li>`; }).join("")}</ul>`
+        ${joinNow(s)}<div class="links">${s.link && !isLive(s)?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}${s.cal?"":`<a href="${add}" target="_blank" rel="noopener">Add to calendar</a>`}</div>${replyHtml(s)}</div></li>`; }).join("")}</ul>`
       : `<p class="muted small" style="margin:0">No sessions scheduled yet.</p>`;
   }
   if (C.link) h += `<a class="cal-link" href="${esc(C.link)}" target="_blank" rel="noopener">Open the training calendar</a>`;
@@ -439,7 +445,8 @@ function advance(){
 
 window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
 if (LMS.deptOnly()) location.replace("department.html");   // no batch, no General: Department only
-else if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); if (!GENERAL) LMS.syncCalSessions().then(changed => { if (changed) render(); }); }
+else if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); if (!GENERAL) LMS.syncCalSessions().then(changed => { if (changed) render(); });
+  if (!GENERAL) { const liveKey = () => mySessions().filter(isLive).map(s => s.id).join(); let lk = liveKey(); setInterval(() => { const k = liveKey(); if (k !== lk) { lk = k; render(); } }, 30000); } }
 </script>
 </body>
 </html>
