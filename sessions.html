@@ -110,7 +110,7 @@ function render(rows){
     const pr = {}; PPL.forEach(p => pr[String(p.email).toLowerCase()] = p);   // People tab wins: Inactive, or moved to another batch = left out
     const ppl = [...(R.batches[batchSel] || []), ...PPL.filter(p => String(p.batch) === batchSel).map(p => p.email)].map(e => String(e).toLowerCase())
       .filter(e => !adm.includes(e) && (!pr[e] || (pr[e].active && (!pr[e].batch || String(pr[e].batch) === batchSel) && !(pr[e].access || []).some(a => /^admin$/i.test(a)))));
-    Attendance.mount($("att"), { batch: batchSel, nameOf, people: ppl, sessions: sessions.filter(s => s.id).map(s => ({ id: s.id, title: s.title, when: s.when })) });
+    Attendance.mount($("att"), { batch: batchSel, nameOf, people: ppl, sessions: sessions.filter(s => s.id).map(s => ({ id: s.id, title: s.title, when: s.when, cal: !!s.cal })) });
   }
   $("refresh").onclick = load;
   $("bsel").onchange = e => { batchSel = e.target.value; render(rows); };

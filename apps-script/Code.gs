@@ -69,7 +69,7 @@ const SETTINGS_HEADER = ["Key", "Value", "Updated", "By"];
 // Yes/No replies to live sessions. One row per reply; the latest row per person + session wins. Shown to trainers on sessions.html.
 const SESSIONS_SHEET = "Sessions";
 const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Answer", "Note", "Informed TL"];
-// Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / absent / leave / "" (cleared).
+// Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / tardy / absent / leave / "" (cleared).
 const ATTENDANCE_SHEET = "Attendance";
 // Extra attempts given by an admin (Grades page): one row = one more try at one exam for one person. Used = when it was spent; Cancelled = Yes if taken back unused.
 const RETAKES_SHEET = "Retakes";
@@ -278,7 +278,7 @@ function doPost(e) {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
       const safe = function (v, n) { v = String(v == null ? "" : v).replace(/^'+/, "").slice(0, n); return /^[=+\-@]/.test(v) ? "'" + v : v; };
       const rows = (Array.isArray(p.rows) ? p.rows : []).slice(0, 300).filter(function (r) {
-        return /^[^@\s]+@firstcircle\.com$/i.test(String(r.email || "").trim()) && /^[A-Za-z0-9_.:-]{1,60}$/.test(String(r.session || "")) && ["present", "absent", "leave", ""].indexOf(String(r.status || "")) !== -1;
+        return /^[^@\s]+@firstcircle\.com$/i.test(String(r.email || "").trim()) && /^[A-Za-z0-9_.:-]{1,60}$/.test(String(r.session || "")) && ["present", "tardy", "absent", "leave", ""].indexOf(String(r.status || "")) !== -1;
       });
       if (!rows.length) throw new Error("bad-input");
       const sh = sheet_(ATTENDANCE_SHEET, ATTENDANCE_HEADER), now = new Date(), prev = {};
