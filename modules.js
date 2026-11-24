@@ -47,7 +47,6 @@ window.LMS_PLANS = {
 window.LMS_SESSIONS = [
   // id: used by days (sessions:["id"]) and for the saved Yes/No. Never rename once people have replied. batch: one batch number or a list. Only people in that batch see the session and are asked Yes/No (admins and other batches do not); shown on the Sessions page. desc: full description ("See details").
   { id:"s-d2-f2f", batch:"110926", title:"Day 2: Onboarding - [F2F] Industry and Product Knowledge Discussion", when:"2026-11-10T15:00", minutes:165, room:"BOTT-1-Board Room (15)", link:"", desc:"" },
-  { id:"s-d2-f2f-112326", batch:"112326", title:"Day 2: Onboarding - [F2F] Product Knowledge & Positioning", when:"2026-11-24T14:45", minutes:165, room:"BOTT-1-Board Room (15)", link:"", desc:"" },
   { id:"s-d3-self", batch:"110926", title:"Day 3: Onboarding [Self Pace] - Product Exam 1 & Connect Learning Materials", when:"2026-11-11T09:00", minutes:165, room:"", link:"",
     desc:"Please accomplish Product Exam 1, Guided Demos (Onboarding), and Guided Demos (Open BCL) for the morning." },
   { id:"s-d3-virtual", batch:"110926", title:"Day 3: Onboarding - [Virtual] Product Exam 1 & First Circle Connect Intro Discussion", when:"2026-11-11T14:30", minutes:180, room:"", link:"https://meet.google.com/eno-jkod-mae",

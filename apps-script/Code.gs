@@ -72,6 +72,9 @@ const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "A
 // Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / absent / leave / "" (cleared).
 const ATTENDANCE_SHEET = "Attendance";
 const ATTENDANCE_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Session", "Status", "Note", "By"];
+// Sessions added by hand on the Sessions page (for attendance only; not shown to AMs). Removed = "Yes" hides one.
+const ATT_SESSIONS_SHEET = "Attendance sessions";
+const ATT_SESSIONS_HEADER = ["Timestamp", "Session ID", "Batch", "Title", "When", "Minutes", "By", "Removed"];
 const EXAM_TAB_HEADER = ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details"];
 // Exams whose tab needs a different header (default is EXAM_TAB_HEADER). The Connect sim also records the step-by-step breakdown and trainer notes.
 const EXAM_TAB_HEADERS = { "d4-exam-connect-sim": ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Breakdown", "Notes"] };
@@ -180,25 +183,28 @@ function doPost(e) {
       const b = String(p.batch || "").replace(/[^0-9]/g, "").slice(0, 6);
       appendByHeader_(sheet_(MANUAL_SHEET, MANUAL_HEADER), { "Timestamp": new Date(), "Email": em, "Name": safe(p.name, 100), "Batch": b ? "'" + b : "", "Rubric ID": rid,
         "Overall": safe(p.overall, 20), "Graded by": user.email, "Details": safe(p.details, 5000), "Items": items });
+      audit_(user.email, "manual grade", em + " · " + rid, "", String(p.overall || "") + (p.details ? " | " + String(p.details).slice(0, 2000) : ""));
       return json_({ ok: true });
     }
     if (req.action === "setDetails") {     // admins: rewrite the Details (notes) cell of existing Grades rows for one batch. Nothing else in the row is touched.
       if (!isAdmin_(user.email)) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
-      const allowed = BATCHES[String(p.batch || "")], rowsIn = Array.isArray(p.rows) ? p.rows.slice(0, 500) : [];
-      if (!allowed) throw new Error("bad-batch");
+      const bsel = String(p.batch || "").replace(/[^0-9]/g, ""), rowsIn = Array.isArray(p.rows) ? p.rows.slice(0, 500) : [];
+      if (!bsel) throw new Error("bad-batch");
+      const inBatch = function (em) { return batchOfEmail_(em) === bsel; };   // BATCHES in this file, else the People tab
       const sh = sheet_(GRADES_SHEET, GRADES_HEADER), v = sh.getDataRange().getValues(), h = v[0];
       const cE = h.indexOf("Email"), cX = h.indexOf("Exam ID"), cA = h.indexOf("Attempt"), cD = h.indexOf("Details");
       if (cE < 0 || cX < 0 || cD < 0) throw new Error("missing-columns");
       let updated = 0;
       rowsIn.forEach(function (it) {
         const em = String(it.email || "").toLowerCase(); let text = String(it.details || "").slice(0, 3000);
-        if (allowed.indexOf(em) === -1 || !it.id || !text) return;
+        if (!inBatch(em) || !it.id || !text) return;
         for (let r = 1; r < v.length; r++) {
           if (String(v[r][cE]).toLowerCase() !== em || String(v[r][cX]) !== String(it.id) || (cA > -1 && String(v[r][cA]) !== String(it.attempt))) continue;
           const m = /^Honor code: .*?(?: \| |$)/.exec(String(v[r][cD] || ""));        // keep the honor-code name at the start
           const pre = !m ? "" : / \| $/.test(m[0]) ? m[0] : m[0] + " | ";
           if (!pre && /^[=+\-@]/.test(text)) text = "'" + text;                       // keep text from being read as a formula
+          if (String(v[r][cD] || "") !== pre + text) audit_(user.email, "grade notes", em + " · " + it.id + (cA > -1 ? " #" + v[r][cA] : ""), v[r][cD], pre + text);
           sh.getRange(r + 1, cD + 1).setValue(pre + text); updated++;
           break;
         }
@@ -223,7 +229,26 @@ function doPost(e) {
     }
     if (req.action === "adminAttendance") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
-      return json_({ ok: true, rows: readRows_(ATTENDANCE_SHEET) });
+      const extra = readRows_(ATT_SESSIONS_SHEET).filter(function (r) { return r["Session ID"] && !/^y/i.test(String(r.Removed || "")); }).map(function (r) {
+        return { id: String(r["Session ID"]), batch: batchText_(r.Batch), title: String(r.Title || ""), when: String(r.When || "").replace(/^'/, ""), minutes: Number(r.Minutes) || 60, by: r.By };
+      });
+      return json_({ ok: true, rows: readRows_(ATTENDANCE_SHEET), sessions: extra });
+    }
+    if (req.action === "addAttSession") {      // admins: a session added by hand on the Sessions page (attendance only)
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const b = String(p.batch || "").replace(/[^0-9]/g, "").slice(0, 6), w = String(p.when || "");
+      let t = String(p.title || "").trim().slice(0, 150); if (/^[=+\-@]/.test(t)) t = "'" + t;
+      if (!b || !t || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(w)) throw new Error("bad-input");
+      const id = "m-" + Utilities.getUuid().slice(0, 8);
+      appendByHeader_(sheet_(ATT_SESSIONS_SHEET, ATT_SESSIONS_HEADER), { "Timestamp": new Date(), "Session ID": id, "Batch": "'" + b, "Title": t, "When": "'" + w, "Minutes": Math.max(0, Math.min(1440, Number(p.minutes) || 60)), "By": user.email, "Removed": "" });
+      audit_(user.email, "attendance session added", "Batch " + b + " · " + id, "", t + " · " + w + " · " + p.minutes + " min");
+      return json_({ ok: true, id: id });
+    }
+    if (req.action === "removeAttSession") {   // admins: hide a hand-added session (its marks stay in the Attendance tab)
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const sh = sheet_(ATT_SESSIONS_SHEET, ATT_SESSIONS_HEADER), vals = sh.getDataRange().getValues(), h = vals[0], ic = h.indexOf("Session ID"), ir = h.indexOf("Removed");
+      for (let i = 1; i < vals.length; i++) if (String(vals[i][ic]) === String(p.id || "") && /^m-/.test(String(p.id))) { sh.getRange(i + 1, ir + 1).setValue("Yes"); audit_(user.email, "attendance session removed", String(p.id), vals[i][h.indexOf("Title")], "removed"); return json_({ ok: true }); }
+      throw new Error("not-found");
     }
     if (req.action === "saveAttendance") {     // admins: marks for one or more people (Mark all present sends several at once)
       if (!isAdmin_(user.email)) throw new Error("not-admin");
@@ -232,8 +257,11 @@ function doPost(e) {
         return /^[^@\s]+@firstcircle\.com$/i.test(String(r.email || "").trim()) && /^[A-Za-z0-9_.:-]{1,60}$/.test(String(r.session || "")) && ["present", "absent", "leave", ""].indexOf(String(r.status || "")) !== -1;
       });
       if (!rows.length) throw new Error("bad-input");
-      const sh = sheet_(ATTENDANCE_SHEET, ATTENDANCE_HEADER), now = new Date();
+      const sh = sheet_(ATTENDANCE_SHEET, ATTENDANCE_HEADER), now = new Date(), prev = {};
+      readRows_(ATTENDANCE_SHEET).forEach(function (r) { prev[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = String(r.Status || "") + (r.Note ? " · " + String(r.Note).replace(/^'/, "") : ""); });
       rows.forEach(function (r) {
+        const k = String(r.email).trim().toLowerCase() + "|" + r.session, after = String(r.status || "") + (r.note ? " · " + r.note : "");
+        if ((prev[k] || "") !== after) audit_(user.email, "attendance", String(r.email).trim().toLowerCase() + " · " + String(r.title || r.session).slice(0, 150), prev[k] || "", after || "(cleared)");
         const b = String(r.batch || "").replace(/[^0-9]/g, "").slice(0, 6);
         appendByHeader_(sh, { "Timestamp": now, "Email": String(r.email).trim().toLowerCase(), "Name": safe(r.name, 100), "Batch": b ? "'" + b : "", "Session ID": String(r.session),
           "Session": safe(r.title, 150), "Status": String(r.status || ""), "Note": safe(r.note, 1000), "By": user.email });
@@ -256,8 +284,9 @@ function doPost(e) {
       try { CacheService.getScriptCache().remove("settings_v1"); } catch (e) {}
       const sh = sheet_(SETTINGS_SHEET, SETTINGS_HEADER), vals = sh.getDataRange().getValues();
       for (let i = 1; i < vals.length; i++) {
-        if (vals[i][0] === key) { sh.getRange(i + 1, 2, 1, 3).setValues([[val, new Date(), user.email]]); return json_({ ok: true }); }
+        if (vals[i][0] === key) { if (String(vals[i][1]) !== val) audit_(user.email, "setting", key, vals[i][1], val); sh.getRange(i + 1, 2, 1, 3).setValues([[val, new Date(), user.email]]); return json_({ ok: true }); }
       }
+      audit_(user.email, "setting", key, "", val);
       appendByHeader_(sh, { "Key": key, "Value": val, "Updated": new Date(), "By": user.email });
       return json_({ ok: true });
     }

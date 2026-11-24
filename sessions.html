@@ -39,12 +39,12 @@ const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",da
 const fmt = s => { const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`; };
 
-let noReplies = false, batchSel = "", cal = [], calErr = false, PPL = [];   // PPL: People tab (Settings), for onboardees of new batches
+let noReplies = false, batchSel = "", cal = [], calErr = false, PPL = [], BL = [];   // PPL: People tab (Settings), for onboardees of new batches
 const TEST_BATCHES = ["000000", "000001"];   // test accounts: left out of "All batches"; pick the batch to see them
 async function load(){
   $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading replies from the Sheet…</p>';
   const [res, cr, pp] = await Promise.all([LMS.adminRsvps(), LMS.syncCalSessions().then(r => r !== null, () => false), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null]);
-  PPL = (pp && pp.ok && pp.people) || []; if (window.Attendance) Attendance.reload();
+  PPL = (pp && pp.ok && pp.people) || []; BL = ((pp && pp.ok && pp.batches) || []).map(b => String(b.batch || "")).filter(Boolean); if (window.Attendance) Attendance.reload();
   cal = LMS.calSessions(); calErr = !cr;
   if (res && res.error === "not-admin") { $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Your email isn\'t an admin.</p>'; return; }
   noReplies = !res || !res.ok;   // still show the sessions; replies come once the Sheet answers (or Code.gs is redeployed)
@@ -57,7 +57,7 @@ function render(rows){
   rows.slice().sort((a,b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => { latest[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = r; });
   const R = LMS.roster(), now = new Date();
   const bl = s => s.batch ? [].concat(s.batch) : [];
-  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(cal.flatMap(s => s.batches || [])))].sort();
+  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(cal.flatMap(s => s.batches || []), PPL.filter(p => p.active && p.batch).map(p => String(p.batch)), BL))].filter(b => b && b !== "000002").sort();   // plus batches from Settings, so a new batch can add sessions by hand
   // Google Calendar events (salesops calendar, Code.gs calSessions) plus modules.js sessions; a modules.js one at the same start time as a calendar one is left out
   const calList = cal.filter(s => batchSel ? (s.batches || []).includes(batchSel) : (s.batches || []).some(b => !TEST_BATCHES.includes(b)) || !(s.batches || []).length).map(s => ({ ...s, cal:true }));
   const legacy = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).filter(s => !cal.some(c => +new Date(c.when) === +new Date(s.when)));
@@ -107,8 +107,9 @@ function render(rows){
     ${past.map(card).join("") || '<p class="muted">No past sessions.</p>'}`;
   if (window.Attendance) {   // people of this batch: roster.js, the People tab, and calendar guests of this batch's sessions
     const adm = R.admins.map(a => a.toLowerCase());
-    const ppl = [...(R.batches[batchSel] || []), ...PPL.filter(p => p.active && String(p.batch) === batchSel && !(p.access || []).some(a => /^admin$/i.test(a))).map(p => p.email)]
-      .map(e => String(e).toLowerCase()).filter(e => !adm.includes(e));
+    const pr = {}; PPL.forEach(p => pr[String(p.email).toLowerCase()] = p);   // People tab wins: Inactive, or moved to another batch = left out
+    const ppl = [...(R.batches[batchSel] || []), ...PPL.filter(p => String(p.batch) === batchSel).map(p => p.email)].map(e => String(e).toLowerCase())
+      .filter(e => !adm.includes(e) && (!pr[e] || (pr[e].active && (!pr[e].batch || String(pr[e].batch) === batchSel) && !(pr[e].access || []).some(a => /^admin$/i.test(a)))));
     Attendance.mount($("att"), { batch: batchSel, nameOf, people: ppl, sessions: sessions.filter(s => s.id).map(s => ({ id: s.id, title: s.title, when: s.when })) });
   }
   $("refresh").onclick = load;

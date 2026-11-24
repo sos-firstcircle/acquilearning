@@ -34,11 +34,11 @@
       body: JSON.stringify({ action, token, gtoken, payload, email: u.email, name: u.name, code: u.code || "" }) }).then(r => r.json()).catch(() => null);
   }
 
-  let MARKS = null;   // "email|session" -> { status, note, at, by }
+  let MARKS = null, EXTRA = [];   // MARKS: "email|session" -> { status, note, at, by }. EXTRA: sessions added by hand here (Attendance sessions tab)
   async function loadMarks() {
     const res = await post("adminAttendance", {});
     if (!res || !res.ok) return res && res.error === "unknown-action" ? "redeploy" : "error";
-    MARKS = {};
+    MARKS = {}; EXTRA = (res.sessions || []).map(x => ({ ...x, when: /[+Z]/.test(x.when.slice(16)) ? x.when : x.when + "+08:00", manual: true }));
     res.rows.slice().sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => {
       MARKS[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = { status: String(r.Status || ""), note: String(r.Note || "").replace(/^'/, ""), at: r.Timestamp, by: r.By };
     });
@@ -48,18 +48,20 @@
   function mount(el, ctx) {
     if (!document.getElementById("att-css")) { const st = document.createElement("style"); st.id = "att-css"; st.textContent = css; document.head.appendChild(st); }
     const nameOf = ctx.nameOf || (e => e);
-    const sessions = ctx.sessions.slice().sort((a, b) => new Date(a.when) - new Date(b.when));
+    let sessions = [];
     const people = [...new Set(ctx.people.map(e => String(e).toLowerCase()))].sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-    if (!sessions.length) { el.innerHTML = '<p class="muted">No sessions for this batch yet.</p>'; return; }
     if (!people.length) { el.innerHTML = '<p class="muted">No onboardees in this batch.</p>'; return; }
     const draw = () => {
       if (!MARKS) { el.innerHTML = '<p class="muted">Loading attendance…</p>'; return; }
+      sessions = ctx.sessions.concat(EXTRA.filter(x => x.batch === ctx.batch)).sort((a, b) => new Date(a.when) - new Date(b.when));
+      const addBtn = `<div style="margin:0 0 10px"><button class="btn sm" id="attadd">+ Add a session</button> <span class="small muted">For sessions not on the calendar (trainers only; AMs don't see it).</span><div id="attform"></div></div>`;
+      if (!sessions.length) { el.innerHTML = addBtn + '<p class="muted">No sessions for this batch yet.</p>'; wireAdd(); return; }
       const m = (e, s) => MARKS[e + "|" + s.id] || { status: "", note: "" };
       const cnt = s => { const n = { present: 0, absent: 0, leave: 0 }; people.forEach(e => { const x = m(e, s).status; if (n[x] != null) n[x]++; }); return n; };
       const day = s => new Date(s.when).toLocaleDateString("en-PH", { month: "short", day: "numeric" }) + ", " + new Date(s.when).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" });
-      el.innerHTML = `<div class="att-lg"><span><b style="color:var(--green)">✓</b> Present</span><span><b style="color:var(--coral)">✗</b> Absent</span><span><b style="color:#9A6A00">L</b> On leave</span><span>• = has a note (hover to read, click to edit)</span><span id="attmsg"></span></div>
+      el.innerHTML = addBtn + `<div class="att-lg"><span><b style="color:var(--green)">✓</b> Present</span><span><b style="color:var(--coral)">✗</b> Absent</span><span><b style="color:#9A6A00">L</b> On leave</span><span>• = has a note (hover to read, click to edit)</span><span id="attmsg"></span></div>
         <div class="att"><table><thead><tr><th class="nm">Onboardee</th>${sessions.map((s, i) => { const n = cnt(s);
-          return `<th title="${esc(s.title)}">${esc(s.title.length > 40 ? s.title.slice(0, 38) + "…" : s.title)}<span class="sd">${esc(day(s))}</span><span class="cnt">✓${n.present} ✗${n.absent} L${n.leave}</span><br><button class="all" data-all="${i}" title="Mark everyone without a mark as Present">All present</button></th>`; }).join("")}</tr></thead>
+          return `<th title="${esc(s.title)}">${esc(s.title.length > 40 ? s.title.slice(0, 38) + "…" : s.title)}<span class="sd">${esc(day(s))}</span><span class="cnt">✓${n.present} ✗${n.absent} L${n.leave}</span>${s.manual ? `<span class="sd">Added here <button class="all" data-rm="${i}" title="Remove this session (marks stay in the Sheet)" style="margin:0;padding:0 6px">×</button></span>` : ""}<br><button class="all" data-all="${i}" title="Mark everyone without a mark as Present">All present</button></th>`; }).join("")}</tr></thead>
         <tbody>${people.map((e, pi) => `<tr><td class="nm"><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td>${sessions.map((s, si) => { const x = m(e, s), st = ST[x.status];
           const tip = (st ? st.t : "No mark yet") + (x.note ? "\nNote: " + x.note : "") + (x.by ? "\nBy " + x.by : "");
           return `<td><button class="ab ${st ? st.c : ""} ${x.note ? "hn" : ""}" data-c="${pi}|${si}" title="${esc(tip)}" aria-label="${esc(nameOf(e) + ", " + s.title + ": " + tip)}">${st ? st.i : ""}</button></td>`; }).join("")}</tr>`).join("")}</tbody></table></div>`;
@@ -67,8 +69,29 @@
         const todo = people.filter(e => !m(e, s).status);
         if (!todo.length) { msg("Everyone already has a mark for this session."); return; }
         save(todo.map(e => ({ e, s, status: "present", note: m(e, s).note }))); });
+      el.querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => { const s = sessions[+b.dataset.rm];
+        if (!confirm(`Remove "${s.title}" from the tracker? Its marks stay in the Sheet.`)) return;
+        msg("Removing…"); const r = await post("removeAttSession", { id: s.id });
+        if (r && r.ok) { EXTRA = EXTRA.filter(x => x.id !== s.id); draw(); } else msg("Couldn't remove. Try again."); });
+      wireAdd();
       el.querySelectorAll("[data-c]").forEach(b => b.onclick = ev => { ev.stopPropagation(); const [pi, si] = b.dataset.c.split("|").map(Number); pop(b, people[pi], sessions[si]); });
     };
+    function wireAdd() {
+      const b = document.getElementById("attadd"); if (!b) return;
+      b.onclick = () => { const f = document.getElementById("attform"); if (f.innerHTML) { f.innerHTML = ""; return; }
+        f.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;margin-top:10px;padding:12px;border:1px solid var(--line);border-radius:12px">
+          <label class="small">Title<br><input id="atit" style="font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:260px" placeholder="e.g. Day 3: Coaching huddle"></label>
+          <label class="small">Date and start<br><input id="awhen" type="datetime-local" style="font:inherit;padding:5px 8px;border:1px solid var(--line);border-radius:8px"></label>
+          <label class="small">Minutes<br><input id="amin" type="number" min="0" value="60" style="font:inherit;padding:6px 8px;border:1px solid var(--line);border-radius:8px;width:80px"></label>
+          <button class="btn sm primary" id="asave">Add</button><span class="small muted" id="amsg"></span></div>`;
+        document.getElementById("asave").onclick = async () => {
+          const title = document.getElementById("atit").value.trim(), when = document.getElementById("awhen").value, minutes = +document.getElementById("amin").value || 60, m = document.getElementById("amsg");
+          if (!title || !when) { m.textContent = "Add a title and a date and time."; return; }
+          m.textContent = "Saving…"; const r = await post("addAttSession", { batch: ctx.batch, title, when, minutes });
+          if (r && r.ok) { EXTRA.push({ id: r.id, batch: ctx.batch, title, when: when + "+08:00", minutes, manual: true }); draw(); msg("Session added."); }
+          else m.textContent = r && r.error === "unknown-action" ? "The Apps Script needs a New version first." : "Couldn't save. Try again."; };
+        document.getElementById("atit").focus(); };
+    }
     const msg = t => { const x = document.getElementById("attmsg"); if (x) x.textContent = t; };
     async function save(list) {
       const before = list.map(o => [o.e + "|" + o.s.id, MARKS[o.e + "|" + o.s.id]]);
