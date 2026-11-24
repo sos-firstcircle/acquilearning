@@ -94,6 +94,9 @@
   .sess .t{font-size:14px;font-weight:600;line-height:1.35}
   .sess .w{font-size:13px;color:var(--ink-2)}
   .sess .links{display:flex;gap:14px;margin-top:4px;font-size:13px;align-items:center;flex-wrap:wrap}
+  .daysess.selfpace{border:2px solid var(--green)}
+  .sess li.selfpace{border:2px solid var(--green);border-radius:12px;padding:12px;margin:8px 0}
+  .selfnote{margin-top:6px;font-size:13px;color:var(--green);font-weight:600}
   .joinnow{display:inline-flex;align-items:center;gap:7px;margin-top:8px;text-decoration:none}
   .joinnow .dot{width:8px;height:8px;border-radius:50%;background:currentColor;animation:joinpulse 1.4s ease-in-out infinite}
   @keyframes joinpulse{50%{opacity:.3}}
@@ -284,6 +287,10 @@ function dropdown(sel, P){
 }
 
 /* "Join now": from 10 minutes before a session starts until it ends, if it has a meeting link. The page re-checks every 30s, so the button appears and goes away by itself. */
+/* Self-paced: "[Self-Paced]" / "[Self Pace]" in the title. Green outline + a note; no meeting link line. */
+const isSelf = s => /\[\s*self[\s-]*pace(d)?\s*\]/i.test(s.title || "");
+const showTitle = s => String(s.title || "").replace(/\[\s*self[\s-]*pace(d)?\s*\]/ig, "[Self-Paced]");   // shown as "[Self-Paced]" whatever the invite says
+const selfNote = s => isSelf(s) ? `<div class="selfnote">Self-paced session: This time is dedicated to reading your materials.</div>` : "";
 const isLive = s => { const st = +new Date(s.when), n = Date.now(); return !!s.link && n >= st - 10*60000 && n < st + (s.minutes||60)*60000; };
 const joinNow = s => isLive(s) ? `<div><a class="btn sm primary joinnow" href="${esc(s.link)}" target="_blank" rel="noopener"><span class="dot"></span>Join now</a></div>` : "";
 function sessionTime(s){
@@ -307,8 +314,8 @@ const replyHtml = s => s.cal ? calReply(s) : "";
 function daySessions(sel){
   const mine = mySessions(), list = sessIdsOf(sel).map(id => mine.find(x => x.id === id)).filter(Boolean);
   if (!list.length) return "";
-  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess"><b>${esc(s.title)}</b>${joinNow(s)}
-    <div class="small muted">${esc(sessionTime(s))}</div><div class="small muted">Room: ${s.room?esc(s.room):"None"}</div><div class="small muted">Meeting link: ${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:"None"}</div>${s.desc?`<div class="small muted" style="white-space:pre-line">Description: ${esc(s.desc)}</div>`:""}${replyHtml(s)}</div>`).join("")}</div>`;
+  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess${isSelf(s)?" selfpace":""}"><b>${esc(showTitle(s))}</b>${selfNote(s)}${joinNow(s)}
+    <div class="small muted">${esc(sessionTime(s))}</div><div class="small muted">Room: ${s.room?esc(s.room):"None"}</div>${isSelf(s) && !s.link ? "" : `<div class="small muted">Meeting link: ${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:"None"}</div>`}${s.desc?`<div class="small muted" style="white-space:pre-line">Description: ${esc(s.desc)}</div>`:""}${replyHtml(s)}</div>`).join("")}</div>`;
 }
 
 function sessionsHtml(){
@@ -323,8 +330,8 @@ function sessionsHtml(){
       const end = new Date(s.d.getTime()+(s.minutes||60)*60000);
       const add = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(s.title)}&location=${encodeURIComponent(s.room||"")}&dates=${g(s.d)}/${g(end)}&ctz=Asia/Manila`;
       const time = s.d.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})+" to "+end.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
-      return `<li><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
-        <div><div class="t">${esc(s.title)}</div><div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>${s.room?`<div class="w">Room: ${esc(s.room)}</div>`:""}${s.desc?`<details class="more"><summary>See details</summary><div class="w" style="white-space:pre-line">${esc(s.desc)}</div></details>`:""}
+      return `<li${isSelf(s)?' class="selfpace"':""}><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
+        <div><div class="t">${esc(showTitle(s))}</div>${selfNote(s)}<div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>${s.room?`<div class="w">Room: ${esc(s.room)}</div>`:""}${s.desc?`<details class="more"><summary>See details</summary><div class="w" style="white-space:pre-line">${esc(s.desc)}</div></details>`:""}
         ${joinNow(s)}<div class="links">${s.link && !isLive(s)?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}${s.cal?"":`<a href="${add}" target="_blank" rel="noopener">Add to calendar</a>`}</div>${replyHtml(s)}</div></li>`; }).join("")}</ul>`
       : `<p class="muted small" style="margin:0">No sessions scheduled yet.</p>`;
   }
