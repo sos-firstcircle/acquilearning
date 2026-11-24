@@ -71,6 +71,9 @@ const SESSIONS_SHEET = "Sessions";
 const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Answer", "Note", "Informed TL"];
 // Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / absent / leave / "" (cleared).
 const ATTENDANCE_SHEET = "Attendance";
+// Extra attempts given by an admin (Grades page): one row = one more try at one exam for one person. Used = when it was spent; Cancelled = Yes if taken back unused.
+const RETAKES_SHEET = "Retakes";
+const RETAKES_HEADER = ["Timestamp", "Email", "Exam ID", "By", "Used", "Cancelled"];
 const ATTENDANCE_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Session", "Status", "Note", "By"];
 // Sessions added by hand on the Sessions page (for attendance only; not shown to AMs). Removed = "Yes" hides one.
 const ATT_SESSIONS_SHEET = "Attendance sessions";
@@ -107,14 +110,17 @@ function doPost(e) {
     }
 
     if (req.action === "saveResult") {
-      if (!canRetake_(user.batch) && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id; })) {
+      const rz = resetAt_(user.email);   // attempts from before an admin's reset don't count
+      if (!canRetake_(user.batch) && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id && afterReset_(r, rz); })) {
         return json_({ ok: false, error: "already-taken" });
       }
+      const rs = useRetake_(user.email, p.id);   // first attempt after a reset: noted in Details
+      const det = String(p.details || "") + (rs ? (p.details ? " | " : "") + "From reset " + rs.n + " (by " + rs.by + ", " + Utilities.formatDate(rs.at, "Asia/Manila", "MMM d, yyyy h:mm a") + ")" : "");
       const pct = p.max ? Math.round((p.score / p.max) * 1000) / 10 : "";
       const gsh = sheet_(GRADES_SHEET, GRADES_HEADER); ensureColumn_(gsh, "Items");
       const items = /^\{[\s\S]*\}$/.test(String(p.items || "")) && String(p.items).length <= 45000 ? String(p.items) : "";   // JSON only
-      appendByHeader_(gsh, { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Exam ID": p.id, "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Items": items });
-      if (EXAM_TABS[p.id]) appendByHeader_(sheet_(EXAM_TABS[p.id], EXAM_TAB_HEADERS[p.id] || EXAM_TAB_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": p.details || "", "Breakdown": p.breakdown || "", "Notes": p.notes || "" });
+      appendByHeader_(gsh, { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Exam ID": p.id, "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": det, "Items": items });
+      if (EXAM_TABS[p.id]) appendByHeader_(sheet_(EXAM_TABS[p.id], EXAM_TAB_HEADERS[p.id] || EXAM_TAB_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Attempt": p.attempt, "Score": p.score, "Max": p.max, "Percent": pct, "Passed": p.passed ? "Yes" : "No", "Details": det, "Breakdown": p.breakdown || "", "Notes": p.notes || "" });
       return json_({ ok: true });
     }
     if (req.action === "backfillItems") {   // answers kept in the person's browser from before the Items column existed
@@ -145,9 +151,9 @@ function doPost(e) {
         const id = String(r["Item ID"]);
         if (id.indexOf("UNDO:") === 0) delete done[id.substring(5)]; else done[id] = true;
       });
-      const results = {};
+      const results = {}, rz = resetAt_(user.email);
       readRows_(GRADES_SHEET).forEach(function (r) {
-        if (String(r.Email).toLowerCase() !== user.email) return;
+        if (String(r.Email).toLowerCase() !== user.email || !afterReset_(r, rz)) return;   // reset by an admin: earlier attempts no longer count
         const id = r["Exam ID"], at = new Date(r.Timestamp).getTime() || 0;
         const attempt = { score: Number(r.Score), max: Number(r.Max), passed: r.Passed === "Yes", at: at };
         const cur = results[id] || { history: [] };
@@ -164,14 +170,15 @@ function doPost(e) {
     }
     if (req.action === "myGrades") {
       const mine = function (r) { return String(r.Email).toLowerCase() === user.email; };
-      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(mine).map(function (r) { delete r.Items; return r; }),
+      const rz = resetAt_(user.email);
+      return json_({ ok: true, grades: readRows_(GRADES_SHEET).filter(mine).filter(function (r) { return afterReset_(r, rz); }).map(function (r) { delete r.Items; return r; }),
         manual: readRows_(MANUAL_SHEET).filter(mine).filter(function (r) { return !manualHidden_(r["Rubric ID"], user.batch || String(r.Batch || "").replace(/[^0-9]/g, "")); })   // admins switch each requirement on/off per batch (Grades page)
           .map(function (r) { delete r.Items; return r; }) });   // their own trainer-graded results only
     }
     if (req.action === "adminData") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
       if (ADMIN_PASSCODE && p.passcode !== ADMIN_PASSCODE) throw new Error("passcode-required");
-      return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET), manual: readRows_(MANUAL_SHEET) });
+      return json_({ ok: true, grades: readRows_(GRADES_SHEET), progress: readRows_(PROGRESS_SHEET), manual: readRows_(MANUAL_SHEET), retakes: readRows_(RETAKES_SHEET) });
     }
     if (req.action === "saveManual") {     // admins: one manual grade (rubric) for one person. A new row each time; the Grades page shows the latest per person and rubric.
       if (!isAdmin_(user.email)) throw new Error("not-admin");
@@ -185,6 +192,23 @@ function doPost(e) {
         "Overall": safe(p.overall, 20), "Graded by": user.email, "Details": safe(p.details, 5000), "Items": items });
       audit_(user.email, "manual grade", em + " · " + rid, "", String(p.overall || "") + (p.details ? " | " + String(p.details).slice(0, 2000) : ""));
       return json_({ ok: true });
+    }
+    if (req.action === "grantRetake" || req.action === "cancelRetake") {   // admins: reset one exam for one person (Grades page > Manual grading > Graded exam reset): earlier attempts stop counting and the exam is "not taken" again. Undo only before they retake it.
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const em = String(p.email || "").toLowerCase().trim(), xid = String(p.id || "").trim();
+      if (!/^[^@\s]+@firstcircle\.com$/.test(em) || !/^[A-Za-z0-9_.:-]{1,80}$/.test(xid)) throw new Error("bad-input");
+      const sh = sheet_(RETAKES_SHEET, RETAKES_HEADER);
+      if (req.action === "grantRetake") {
+        if (openRetakes_(em).indexOf(xid) !== -1) return json_({ ok: true, already: true });   // already reset and not retaken yet
+        appendByHeader_(sh, { "Timestamp": new Date(), "Email": em, "Exam ID": xid, "By": user.email, "Used": "", "Cancelled": "" });
+        audit_(user.email, "attempt reset", em + " · " + xid, "", "1 fresh attempt");
+        return json_({ ok: true });
+      }
+      const v = sh.getDataRange().getValues(), h = v[0], cE = h.indexOf("Email"), cX = h.indexOf("Exam ID"), cU = h.indexOf("Used"), cC = h.indexOf("Cancelled");
+      for (let i = v.length - 1; i >= 1; i--) if (String(v[i][cE]).toLowerCase() === em && String(v[i][cX]) === xid && !v[i][cU] && !/^y/i.test(String(v[i][cC]))) {
+        sh.getRange(i + 1, cC + 1).setValue("Yes"); audit_(user.email, "reset undone", em + " · " + xid, "1 fresh attempt", "undone (not taken)"); return json_({ ok: true });
+      }
+      throw new Error("not-found");
     }
     if (req.action === "setDetails") {     // admins: rewrite the Details (notes) cell of existing Grades rows for one batch. Nothing else in the row is touched.
       if (!isAdmin_(user.email)) throw new Error("not-admin");
@@ -700,6 +724,32 @@ function writeTable_(name, header, rows) {
 /** One row in the Audit tab per change made from the Settings page. */
 function audit_(by, action, target, before, after) {
   try { appendByHeader_(sheet_(AUDIT_SHEET, AUDIT_HEADER), { "Timestamp": new Date(), "By": by, "Action": action, "Target": target, "Before": String(before || "").slice(0, 45000), "After": String(after || "").slice(0, 45000) }); } catch (e) {}
+}
+
+/** Exam ids this person has an unused extra attempt for (Retakes tab). */
+function openRetakes_(em) {
+  em = String(em).toLowerCase();
+  return readRows_(RETAKES_SHEET).filter(function (r) { return String(r.Email).toLowerCase() === em && !r.Used && !/^y/i.test(String(r.Cancelled || "")); }).map(function (r) { return String(r["Exam ID"]); });
+}
+/** { examId: time of the latest reset (not undone) } for this person. Attempts at or before it don't count. */
+function resetAt_(em) {
+  em = String(em).toLowerCase(); const out = {};
+  readRows_(RETAKES_SHEET).forEach(function (r) { if (String(r.Email).toLowerCase() !== em || /^y/i.test(String(r.Cancelled || ""))) return;
+    const t = new Date(r.Timestamp).getTime() || 0, id = String(r["Exam ID"]); if (t > (out[id] || 0)) out[id] = t; });
+  return out;
+}
+function afterReset_(r, rz) { const t = rz[String(r["Exam ID"])]; return !t || (new Date(r.Timestamp).getTime() || 0) > t; }
+/** Mark the open reset for this person + exam as used (their first attempt after it). Returns { by, at } or null. */
+function useRetake_(em, xid) {
+  const sh = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(RETAKES_SHEET); if (!sh) return null;
+  const v = sh.getDataRange().getValues(), h = v[0], cE = h.indexOf("Email"), cX = h.indexOf("Exam ID"), cU = h.indexOf("Used"), cC = h.indexOf("Cancelled");
+  let n = 0;   // which reset this is for this person + exam (undone ones don't count)
+  for (let i = 1; i < v.length; i++) {
+    if (String(v[i][cE]).toLowerCase() !== String(em).toLowerCase() || String(v[i][cX]) !== String(xid) || /^y/i.test(String(v[i][cC]))) continue;
+    n++;
+    if (!v[i][cU]) { sh.getRange(i + 1, cU + 1).setValue(new Date()); return { n: n, by: String(v[i][h.indexOf("By")]), at: v[i][h.indexOf("Timestamp")] instanceof Date ? v[i][h.indexOf("Timestamp")] : new Date() }; }
+  }
+  return null;
 }
 
 /** A value from the Settings tab, cached 30s (used on every request). */

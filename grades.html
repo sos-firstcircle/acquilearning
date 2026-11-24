@@ -192,7 +192,7 @@ function gate(msg){
 async function load(passcode){
   $("app").innerHTML = '<h1>Grades</h1><p class="muted">Loading from the Sheet…</p>';
   const [res, ppl] = await Promise.all([LMS.adminData(passcode), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null]);   // People/Batches tabs: batches made in Settings
-  if (res && res.ok && ppl && ppl.ok) { res.people = ppl.people || []; res.batchList = (ppl.batches || []).map(b => b.batch).filter(Boolean); }
+  if (res && res.ok && ppl && ppl.ok) { res.people = ppl.people || []; res.batchList = (ppl.batches || []).map(b => b.batch).filter(Boolean); res.retakeBatches = (ppl.batches || []).filter(b => b.retake).map(b => b.batch); }
   if (!res || !res.ok) {
     const e = res && res.error;
     if (e === "passcode-required") return gate(passcode ? "Wrong passcode." : "");
@@ -206,7 +206,10 @@ async function load(passcode){
 function render(){
   const bn = v => (v === "" || v == null) ? "" : String(v).padStart(6, "0");   // Sheets may drop leading zeros
   [].concat(DATA.grades || [], DATA.progress || []).forEach(r => { const e = String(r.Email || "").toLowerCase(); if (/\+[^@]*@/.test(e) && r.Name) CODED[e] = String(r.Name); });
-  const g = DATA.grades.filter(shown).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
+  const RZ = {}; (DATA.retakes || []).forEach(r => { if (/^y/i.test(String(r.Cancelled || ""))) return; const k = String(r.Email).toLowerCase() + "|" + r["Exam ID"], t = new Date(r.Timestamp).getTime() || 0; if (t > (RZ[k] || 0)) RZ[k] = t; });   // latest reset per person + exam
+  const preReset = r => { const t = RZ[r.Email + "|" + r["Exam ID"]]; return !!t && (new Date(r.Timestamp).getTime() || 0) <= t; };
+  const gAll = DATA.grades.filter(shown).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
+  const g = gAll.filter(r => !preReset(r));   // attempts from before a reset don't count anywhere on this page
   const PB = {}; (DATA.people || []).forEach(p => { if (p.active && p.batch && !(p.access || []).some(a => /^admin$/i.test(a))) PB[String(p.email).toLowerCase()] = bn(p.batch); });   // People tab (Settings)
   const bOf = e => LMS.batchOf(e) || PB[e] || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());
@@ -242,6 +245,23 @@ function render(){
     return rs.some(okRow) ? { k:"pass", t:"Proceed to Week 2" } : rs.length === PROD.length ? { k:"fail", t:"Do not proceed" } : { k:"none", t:"Pending (" + rs.length + " of " + PROD.length + " taken)" }; };
   const mText = r => r ? (r.Overall || "Graded") : "";
   const mPill = (id, r) => { if (!r) return '<span class="pill none">—</span>'; return `<button class="pill ${mClass(id, r.Overall)}" ${batchSel ? "" : 'disabled title="Pick a batch at the top first to open this in Manual grading"'} data-medit="${esc(r.Email)}|${esc(id)}" ${batchSel ? 'title="Open in Manual grading"' : ""} style="border:0;cursor:${batchSel ? "pointer" : "default"};${batchSel ? "" : "opacity:.45;filter:grayscale(1);"}font:inherit;font-weight:600;font-size:13px">${esc(mText(r))}</button>`; };
+  /* Extra attempts (Retakes tab): admins give one more try at one exam to someone who can't retake. Latest open one per person + exam. */
+  const openRk = {}; (DATA.retakes || []).forEach(r => { if (!r.Used && !/^y/i.test(String(r.Cancelled || ""))) openRk[String(r.Email).toLowerCase() + "|" + r["Exam ID"]] = r; });
+  const retakeBatch = b => (LMS.config.multiAttempt || []).includes(b) || (DATA.retakeBatches || []).includes(b);
+  /* "Graded exam reset" (in Manual grading): one onboardee's exams, latest + best score, and Reset attempt = one fresh try at that exam (Retakes tab, logged). */
+  const RESET = "__reset";
+  const nRz = k => (DATA.retakes || []).filter(r => String(r.Email).toLowerCase() + "|" + r["Exam ID"] === k && !/^y/i.test(String(r.Cancelled || ""))).length;
+  const rkTable = e => { const mine = gAll.filter(r => r.Email === e), ids = [...new Set(mine.map(r => r["Exam ID"]))].sort((a, b) => rank(a) - rank(b));
+    if (!ids.length) return '<p class="muted">No graded exams for this onboardee yet.</p>';
+    const free = retakeBatch(bOf(e));
+    return `${free ? '<p class="small muted" style="margin:0 0 8px">This batch can already retake every exam, so no reset is needed.</p>' : ""}<div class="scroll"><table class="tbl"><thead><tr><th>Exam</th><th>Attempts that count</th><th>Latest</th><th>Counted score</th><th>Reset</th></tr></thead><tbody>${ids.map(x => {
+      const all = mine.filter(r => r["Exam ID"] === x).sort((a, b) => String(a.Timestamp).localeCompare(String(b.Timestamp))), rs = all.filter(r => !preReset(r)), k = e + "|" + x, last = rs[rs.length - 1], old = all.length - rs.length;
+      const sc = r => r ? `${esc(r.Score)}/${esc(r.Max)}${r.p != null ? ` <span class="pill ${okRow(r) ? "pass" : "fail"}">${r.p}%</span>` : ""}<div class="small muted">${esc(when(r.Timestamp))}</div>` : '<span class="pill none">Not taken</span>';
+      const act = free ? '<span class="small muted">Not needed</span>' : openRk[k]
+        ? `<span class="pill none" title="By ${esc(openRk[k].By)} on ${esc(when(openRk[k].Timestamp))}">Reset, not retaken yet</span> <button class="btn sm" data-rkc="${esc(k)}" title="Undo the reset (only before they retake it): their earlier attempts count again">Undo</button>`
+        : `<button class="btn sm" data-rkg="${esc(k)}">Reset attempt</button>`;
+      return `<tr><td><b>${esc(nice(x))}</b></td><td>${rs.length}${old ? ` <span class="small muted">(${old} before reset, not counted)</span>` : ""}${nRz(k) ? `<div class="small muted">Reset ${nRz(k)} time${nRz(k) > 1 ? "s" : ""}</div>` : ""}</td><td>${sc(last)}</td><td>${sc(best[k])}</td><td>${act}</td></tr>`; }).join("")}</tbody></table></div>
+      <p class="small muted" style="margin:8px 0 0">Reset attempt sets the exam back to "not taken": their earlier attempts stop counting (they stay in the Sheet), and if that day isn't finished anymore, the days after it lock again until they retake it. The new attempt's notes say "From reset". Every reset is logged (Retakes and Audit tabs).</p>`; };
   const sumCell = (e,x) => { if (manOf(x)) return mPill(x, mlast[e + "|" + x]); if (x !== DEC) return cell(e,x); const d = decide(e); return `<span class="pill ${d.k}" style="white-space:nowrap">${d.t}</span>`; };
   const sumRows = () => [["Onboardee", "Email", "Batch", ...cols.map(x => x === DEC ? "Decision" : manOf(x) ? manOf(x).title : nice(x) + " (%)"), "Latest Day Progress", "Tasks done"],
     ...learners.map(e => [nameOf(e), e, bOf(e), ...cols.map(x => x === DEC ? decide(e).t : manOf(x) ? mText(mlast[e + "|" + x]) : (best[e+"|"+x] && best[e+"|"+x].p != null ? best[e+"|"+x].p : "")), lastDay(e), (prog[e]||new Set()).size])];
@@ -257,7 +277,7 @@ function render(){
 
     <h2 class="sec">Manual grading</h2>
     <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the Visible to AMs switch for their batch is on (green). To see the switch, pick a batch at the top. Saving again keeps the old version and shows the newest.</p>
-    ${!MAN.length ? '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>' : !batchSel ? '<p class="muted">Pick a batch at the top to grade or see manual requirements.</p>' : `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement"><option value="">Pick a requirement</option>${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
+    ${!MAN.length ? '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>' : !batchSel ? '<p class="muted">Pick a batch at the top to grade or see manual requirements.</p>' : `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement"><option value="">Pick a requirement</option>${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}<option value="__reset">Graded exam reset</option></select>
       <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select>
 </div>
     <div class="vis" id="mvis"></div>
@@ -281,8 +301,8 @@ function render(){
   const draw = () => {
     const q = $("q").value.trim().toLowerCase(), x = $("ex").value;
     const bsel = $("bf").value;
-    const rows = g.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
-    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    const rows = gAll.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
+    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}${preReset(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An admin reset this exam after this attempt, so it no longer counts">Before reset · not counted</span></div>' : ""}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;
   $("q").oninput = draw; $("ex").onchange = draw; draw();
@@ -427,6 +447,8 @@ function render(){
   const mDraw = () => { if (!$("mr")) return;
     const picked = !!$("mr").value; $("mp").hidden = !picked;   // pick a requirement first, so the page stays short
     if (!picked) { $("mvis").innerHTML = ""; $("mform").innerHTML = ""; $("mlist").innerHTML = ""; return; }
+    if ($("mr").value === RESET) { $("mvis").innerHTML = ""; $("mlist").innerHTML = ""; const e = $("mp").value;
+      $("mform").innerHTML = e ? rkTable(e) : '<p class="muted">Pick an onboardee to see their exams.</p>'; wireRk(); return; }
     mVis();
     const m = manOf($("mr").value), e = $("mp").value, prev = e ? mlast[e + "|" + m.id] : null, num = mNumeric(m);
     let old = null; try { old = prev ? JSON.parse(prev.Items || "") : null; } catch (er) {}
@@ -470,10 +492,25 @@ function render(){
         items: JSON.stringify({ manual: 1, title: m.title, sections, overall, note, ...(num ? { score: calc.score, max: calc.max, pct: calc.pct, transmuted: calc.t } : {}) }) } }) }).then(x => x.json()).catch(() => null);
     if (res && res.ok) { $("mmsg").textContent = "Saved. Reloading…"; MSEL = { r: m.id, p: e }; load(sessionStorage.getItem("amhub.adminpc") || ""); }
     else { $("msave").disabled = false; $("mmsg").textContent = !res ? "Couldn't reach the Sheet." : res.error === "unknown-action" ? "The Apps Script needs to be redeployed first (New version)." : "Couldn't save (" + res.error + ")."; } };
-  if ($("mr")) { if (MSEL.r && manOf(MSEL.r)) $("mr").value = MSEL.r; if ([...$("mp").options].some(o => o.value === MSEL.p)) $("mp").value = MSEL.p;
+  if ($("mr")) { if (MSEL.r && (manOf(MSEL.r) || MSEL.r === RESET)) $("mr").value = MSEL.r; if ([...$("mp").options].some(o => o.value === MSEL.p)) $("mp").value = MSEL.p;
     $("mr").onchange = () => { MSEL.r = $("mr").value; mDraw(); };
     LMS.loadSettings().then(mVis).catch(() => {});
     $("mp").onchange = () => { MSEL.p = $("mp").value; mDraw(); }; mDraw(); }
+  const rkPost = (action, k) => { const [email, id] = k.split("|"), u = LMS.user() || {};
+    return fetch(LMS.config.backendUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", gtoken: localStorage.getItem("amacademy.gtoken") || "", code: u.code || "", payload: { email, id } }) }).then(x => x.json()).catch(() => null); };
+  function wireRk(){
+  $("mform").querySelectorAll("[data-rkg]").forEach(b => b.onclick = async () => { const [em, id] = b.dataset.rkg.split("|");
+    if (!confirm(`Reset ${nameOf(em)}'s attempt at ${nice(id)}?\n\nThe exam goes back to \"not taken\". Their earlier attempts stop counting, and later days lock again until they retake it. This is logged.`)) return;
+    b.disabled = true; b.textContent = "Saving…"; const r = await rkPost("grantRetake", b.dataset.rkg);
+    if (r && r.ok) { (DATA.retakes = DATA.retakes || []).push({ Timestamp: new Date().toISOString(), Email: em, "Exam ID": id, By: (LMS.user() || {}).email, Used: "", Cancelled: "" }); render(); }
+    else { b.disabled = false; b.textContent = "Reset attempt"; alert(r && r.error === "unknown-action" ? "The Apps Script needs a New version first." : "Couldn't save. Try again."); } });
+  $("mform").querySelectorAll("[data-rkc]").forEach(b => b.onclick = async () => { const [em, id] = b.dataset.rkc.split("|");
+    if (!confirm(`Undo the reset of ${nice(id)} for ${nameOf(em)}? Their earlier attempts count again. (Only before they retake it.)`)) return;
+    b.disabled = true; const r = await rkPost("cancelRetake", b.dataset.rkc);
+    if (r && r.ok) { (DATA.retakes || []).forEach(x => { if (String(x.Email).toLowerCase() === em && x["Exam ID"] === id && !x.Used) x.Cancelled = "Yes"; }); render(); }
+    else { b.disabled = false; alert(r && r.error === "not-found" ? "It was already used (or taken back). Reload to see." : "Couldn't save. Try again."); } });
+  }
   $("app").querySelectorAll("[data-medit]").forEach(b => b.onclick = () => { const [em, id] = b.dataset.medit.split("|"); MSEL = { r: id, p: em };
     if ($("mr")) { $("mr").value = id; if (![...$("mp").options].some(o => o.value === em)) $("mp").insertAdjacentHTML("beforeend", `<option value="${esc(em)}">${esc(nameOf(em))}</option>`); $("mp").value = em; mDraw(); $("mr").scrollIntoView({ behavior: "smooth", block: "center" }); } });
   if ([...$("ix").options].some(o => o.value === keepIx)) $("ix").value = keepIx; $("isort").value = keepSort;
