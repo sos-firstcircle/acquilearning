@@ -287,10 +287,11 @@ function dropdown(sel, P){
 }
 
 /* "Join now": from 10 minutes before a session starts until it ends, if it has a meeting link. The page re-checks every 30s, so the button appears and goes away by itself. */
-/* Self-paced: "[Self-Paced]" / "[Self Pace]" in the title. Green outline + a note; no meeting link line. */
+/* Self-paced: "[Self-Paced]" / "[Self Pace]" in the title. No meeting link line; green outline + a note only while it's going on (the page re-checks every 30s). */
 const isSelf = s => /\[\s*self[\s-]*pace(d)?\s*\]/i.test(s.title || "");
 const showTitle = s => String(s.title || "").replace(/\[\s*self[\s-]*pace(d)?\s*\]/ig, "[Self-Paced]");   // shown as "[Self-Paced]" whatever the invite says
-const selfNote = s => isSelf(s) ? `<div class="selfnote">Self-paced session: This time is dedicated to reading your materials.</div>` : "";
+const selfNow = s => { const st = +new Date(s.when), n = Date.now(); return isSelf(s) && n >= st && n < st + (s.minutes||60)*60000; };   // highlighted only while it's going on
+const selfNote = s => selfNow(s) ? `<div class="selfnote">Self-paced session: This time is dedicated to reading your materials.</div>` : "";
 const isLive = s => { const st = +new Date(s.when), n = Date.now(); return !!s.link && n >= st - 10*60000 && n < st + (s.minutes||60)*60000; };
 const joinNow = s => isLive(s) ? `<div><a class="btn sm primary joinnow" href="${esc(s.link)}" target="_blank" rel="noopener"><span class="dot"></span>Join now</a></div>` : "";
 function sessionTime(s){
@@ -314,7 +315,7 @@ const replyHtml = s => s.cal ? calReply(s) : "";
 function daySessions(sel){
   const mine = mySessions(), list = sessIdsOf(sel).map(id => mine.find(x => x.id === id)).filter(Boolean);
   if (!list.length) return "";
-  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess${isSelf(s)?" selfpace":""}"><b>${esc(showTitle(s))}</b>${selfNote(s)}${joinNow(s)}
+  return `<div style="margin-top:20px"><h3>Upcoming sessions</h3>${list.map(s => `<div class="daysess${selfNow(s)?" selfpace":""}"><b>${esc(showTitle(s))}</b>${selfNote(s)}${joinNow(s)}
     <div class="small muted">${esc(sessionTime(s))}</div><div class="small muted">Room: ${s.room?esc(s.room):"None"}</div>${isSelf(s) && !s.link ? "" : `<div class="small muted">Meeting link: ${s.link?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:"None"}</div>`}${s.desc?`<div class="small muted" style="white-space:pre-line">Description: ${esc(s.desc)}</div>`:""}${replyHtml(s)}</div>`).join("")}</div>`;
 }
 
@@ -330,7 +331,7 @@ function sessionsHtml(){
       const end = new Date(s.d.getTime()+(s.minutes||60)*60000);
       const add = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(s.title)}&location=${encodeURIComponent(s.room||"")}&dates=${g(s.d)}/${g(end)}&ctz=Asia/Manila`;
       const time = s.d.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"})+" to "+end.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
-      return `<li${isSelf(s)?' class="selfpace"':""}><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
+      return `<li${selfNow(s)?' class="selfpace"':""}><div class="date"><small>${s.d.toLocaleDateString("en-PH",{weekday:"short"})}</small><b>${s.d.getDate()}</b></div>
         <div><div class="t">${esc(showTitle(s))}</div>${selfNote(s)}<div class="w">${s.d.toLocaleDateString("en-PH",{month:"short",day:"numeric"})}, ${time}</div>${s.room?`<div class="w">Room: ${esc(s.room)}</div>`:""}${s.desc?`<details class="more"><summary>See details</summary><div class="w" style="white-space:pre-line">${esc(s.desc)}</div></details>`:""}
         ${joinNow(s)}<div class="links">${s.link && !isLive(s)?`<a href="${esc(s.link)}" target="_blank" rel="noopener">Join</a>`:""}${s.cal?"":`<a href="${add}" target="_blank" rel="noopener">Add to calendar</a>`}</div>${replyHtml(s)}</div></li>`; }).join("")}</ul>`
       : `<p class="muted small" style="margin:0">No sessions scheduled yet.</p>`;
@@ -453,7 +454,7 @@ function advance(){
 window.addEventListener("pageshow", e => { if (e.persisted) render(); });   // coming back with the Back button: show the new ticks
 if (LMS.deptOnly()) location.replace("department.html");   // no batch, no General: Department only
 else if (LMS.requireSignIn()) { renderSide(GENERAL ? "general" : "dashboard"); render(); LMS.syncDone.then(changed => { if (changed) render(); }); if (!GENERAL) LMS.syncCalSessions().then(changed => { if (changed) render(); });
-  if (!GENERAL) { const liveKey = () => mySessions().filter(isLive).map(s => s.id).join(); let lk = liveKey(); setInterval(() => { const k = liveKey(); if (k !== lk) { lk = k; render(); } }, 30000); } }
+  if (!GENERAL) { const liveKey = () => mySessions().filter(s => isLive(s) || selfNow(s)).map(s => s.id).join(); let lk = liveKey(); setInterval(() => { const k = liveKey(); if (k !== lk) { lk = k; render(); } }, 30000); } }
 </script>
 </body>
 </html>
