@@ -241,7 +241,7 @@ function render(){
   const decide = e => { const rs = PROD.map(x => best[e+"|"+x]).filter(Boolean);
     return rs.some(okRow) ? { k:"pass", t:"Proceed to Week 2" } : rs.length === PROD.length ? { k:"fail", t:"Do not proceed" } : { k:"none", t:"Pending (" + rs.length + " of " + PROD.length + " taken)" }; };
   const mText = r => r ? (r.Overall || "Graded") : "";
-  const mPill = (id, r) => { if (!r) return '<span class="pill none">—</span>'; return `<button class="pill ${mClass(id, r.Overall)}" data-medit="${esc(r.Email)}|${esc(id)}" title="Open in Manual grading" style="border:0;cursor:pointer;font:inherit;font-weight:600;font-size:13px">${esc(mText(r))}</button>`; };
+  const mPill = (id, r) => { if (!r) return '<span class="pill none">—</span>'; return `<button class="pill ${mClass(id, r.Overall)}" ${batchSel ? "" : 'disabled title="Pick a batch at the top first to open this in Manual grading"'} data-medit="${esc(r.Email)}|${esc(id)}" ${batchSel ? 'title="Open in Manual grading"' : ""} style="border:0;cursor:${batchSel ? "pointer" : "default"};${batchSel ? "" : "opacity:.45;filter:grayscale(1);"}font:inherit;font-weight:600;font-size:13px">${esc(mText(r))}</button>`; };
   const sumCell = (e,x) => { if (manOf(x)) return mPill(x, mlast[e + "|" + x]); if (x !== DEC) return cell(e,x); const d = decide(e); return `<span class="pill ${d.k}" style="white-space:nowrap">${d.t}</span>`; };
   const sumRows = () => [["Onboardee", "Email", "Batch", ...cols.map(x => x === DEC ? "Decision" : manOf(x) ? manOf(x).title : nice(x) + " (%)"), "Latest Day Progress", "Tasks done"],
     ...learners.map(e => [nameOf(e), e, bOf(e), ...cols.map(x => x === DEC ? decide(e).t : manOf(x) ? mText(mlast[e + "|" + x]) : (best[e+"|"+x] && best[e+"|"+x].p != null ? best[e+"|"+x].p : "")), lastDay(e), (prog[e]||new Set()).size])];
@@ -257,11 +257,11 @@ function render(){
 
     <h2 class="sec">Manual grading</h2>
     <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the Visible to AMs switch for their batch is on (green). To see the switch, pick a batch at the top. Saving again keeps the old version and shows the newest.</p>
-    ${MAN.length ? `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement">${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
+    ${!MAN.length ? '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>' : !batchSel ? '<p class="muted">Pick a batch at the top to grade or see manual requirements.</p>' : `<div class="bar" style="margin-top:0"><select id="mr" aria-label="Requirement"><option value="">Pick a requirement</option>${MAN.map(m => `<option value="${esc(m.id)}">${esc(m.title)}</option>`).join("")}</select>
       <select id="mp" aria-label="Onboardee"><option value="">Pick an onboardee</option>${learners.map(e => `<option value="${esc(e)}">${esc(nameOf(e))}${batchSel ? "" : " (" + esc(bOf(e) || "no batch") + ")"}</option>`).join("")}</select>
 </div>
     <div class="vis" id="mvis"></div>
-    <div id="mform"></div><div id="mlist" style="margin-top:14px"></div>` : '<p class="muted">No manual requirements yet (exams/manual-rubrics.js).</p>'}
+    <div id="mform"></div><div id="mlist" style="margin-top:14px"></div>`}
 
     <h2 class="sec">Overall</h2><p class="muted small" style="margin:0 0 10px">Average best score per exam for the selected batch. The dark line is the pass mark.</p>
     <div id="overall"></div>
@@ -294,7 +294,7 @@ function render(){
     if (!confirm("Rewrite the notes (Details cell) of " + list.length + " attempt" + (list.length > 1 ? "s" : "") + " in batch " + batchSel + " in the Google Sheet?\n\nScores and everything else stay as they are.")) return;
     $("fixnotes").disabled = true; $("fixmsg").textContent = "Updating…";
     const u = LMS.user() || {}, res = await fetch(LMS.config.backendUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "setDetails", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "", batch: batchSel, rows: list.map(o => ({ email: o.r.Email, id: o.r["Exam ID"], attempt: o.r.Attempt, details: o.n })) } }) }).then(x => x.json()).catch(() => null);
+      body: JSON.stringify({ action: "setDetails", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", gtoken: localStorage.getItem("amacademy.gtoken") || "", code: u.code || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "", batch: batchSel, rows: list.map(o => ({ email: o.r.Email, id: o.r["Exam ID"], attempt: o.r.Attempt, details: o.n })) } }) }).then(x => x.json()).catch(() => null);
     if (res && res.ok) { $("fixmsg").textContent = res.updated + " updated. Reloading…"; load(sessionStorage.getItem("amhub.adminpc") || ""); }
     else { $("fixnotes").disabled = false; $("fixmsg").textContent = !res ? "Couldn't reach the Sheet." : res.error === "unknown-action" ? "The Apps Script needs to be redeployed first (New version)." : "Couldn't update (" + res.error + ")."; } };
   /* ---- Overall: average best score per exam ---- */
@@ -406,7 +406,7 @@ function render(){
   };
   /* ---- Manual grading form ---- */
   const mVis = () => { if (!$("mvis")) return; const id = $("mr").value, b = batchSel;
-    if (!b) { $("mvis").innerHTML = ""; return; }   // All batches: no switch; pick a batch at the top first
+    if (!b || !id) { $("mvis").innerHTML = ""; return; }   // pick a batch at the top and a requirement first
     const on = !mHidden(id, b);
     $("mvis").innerHTML = `<label class="sw" title="On = batch ${esc(b)} sees this in My grades. Admins always see it."><input type="checkbox" id="mvsw" ${on ? "checked" : ""}><i></i><b>Visible to AMs in batch ${esc(b)}</b> <span class="st">${on ? "Shown" : "Hidden"}</span></label><span class="small muted" id="mvmsg"></span>`;
     const cb = $("mvsw"); cb.onchange = async () => { const on = cb.checked, st = cb.parentNode.querySelector(".st");
@@ -424,7 +424,10 @@ function render(){
   const mTotal = m => { if (!$("mtot")) return; const c = mCalc(m);
     const lv = mLevel(m, c.pct), tag = c.t || (lv ? "Below " + mPass(m) + "%" : "Pass");
     $("mtot").innerHTML = `${fmtN(c.score)} / ${fmtN(c.max)} points (${c.pct}%) <span class="pill mg${lv}">${esc(tag)}</span>${c.all ? "" : ' <span class="small muted" style="font-weight:400">(not every item graded yet)</span>'}`; };
-  const mDraw = () => { if (!$("mr")) return; mVis();
+  const mDraw = () => { if (!$("mr")) return;
+    const picked = !!$("mr").value; $("mp").hidden = !picked;   // pick a requirement first, so the page stays short
+    if (!picked) { $("mvis").innerHTML = ""; $("mform").innerHTML = ""; $("mlist").innerHTML = ""; return; }
+    mVis();
     const m = manOf($("mr").value), e = $("mp").value, prev = e ? mlast[e + "|" + m.id] : null, num = mNumeric(m);
     let old = null; try { old = prev ? JSON.parse(prev.Items || "") : null; } catch (er) {}
     const oldOf = (si, ii) => (old && old.sections && old.sections[si] && old.sections[si].items[ii]) || [];
@@ -462,7 +465,7 @@ function render(){
       sections.map(x => (x.title ? x.title + "\n" : "") + x.items.map(i => "- " + i[0] + ": " + (num && i[5] ? "not counted" : (i[1] || "—") + (num ? " = " + fmtN(i[3]) + "/" + fmtN(i[4]) + " pts" : "")) + (i[2] ? " (" + i[2] + ")" : "")).join("\n")).join("\n");
     $("msave").disabled = true; $("mmsg").textContent = "Saving…";
     const u = LMS.user() || {}, res = await fetch(LMS.config.backendUrl, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ action: "saveManual", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "",
+      body: JSON.stringify({ action: "saveManual", email: u.email, name: u.name, token: sessionStorage.getItem("amacademy.idtoken") || "", gtoken: localStorage.getItem("amacademy.gtoken") || "", code: u.code || "", payload: { passcode: sessionStorage.getItem("amhub.adminpc") || "",
         email: e, name: nameOf(e), batch: bOf(e), id: m.id, overall, details: details.trim(),
         items: JSON.stringify({ manual: 1, title: m.title, sections, overall, note, ...(num ? { score: calc.score, max: calc.max, pct: calc.pct, transmuted: calc.t } : {}) }) } }) }).then(x => x.json()).catch(() => null);
     if (res && res.ok) { $("mmsg").textContent = "Saved. Reloading…"; MSEL = { r: m.id, p: e }; load(sessionStorage.getItem("amhub.adminpc") || ""); }

@@ -78,3 +78,9 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - Google Form and trainer-scored exams do not auto-report scores; trainers add them to the Grades tab by hand (the Grades page will show them).
 - Content is being rewritten day by day, one chat per day. A day-chat edits only its `days/day-NN.js` (and its own lesson files). New exams go in one at a time. Exam ids must be unique and never renamed once people have results.
 - Email-only login is spoofable (anyone who knows a listed email). Fine as a stopgap only.
+
+## Sessions from Google Calendar (since Nov 2026)
+- Code.gs `calSessions` reads the salesops main calendar (Settings key `sessionsCalendar` = another calendar ID). Only events with "Day N" or "Onboarding" in the title, from `CAL_FROM` (2026-11-24; older sessions stay hardcoded in modules.js) or 3 weeks back, whichever is later, to ~2.5 months ahead, cached 5 min. Uses the Google Calendar API service if added in the editor (Meet links), else CalendarApp.
+- A person sees the events they're a guest of (invite individual emails, not a Group; guest list must be visible). Admins get all, with guests and batches.
+- Day = by DATE (`calDay_`): batch start (Batches tab Start, else the MMDDYY batch number) = Day 1, one per weekday, holidays still count. Falls back to "Day N" in the title.
+- Replies: only in Google Calendar (Yes/No/Maybe shown on the dashboard and Sessions page). The hub's own Yes/No buttons, note and team-lead tick were removed; old replies stay in the Sessions tab and show on past modules.js sessions. A modules.js session at the same start time as a calendar one is hidden.

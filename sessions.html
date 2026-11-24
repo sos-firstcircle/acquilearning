@@ -9,6 +9,7 @@
 <script src="shared/lms.js"></script>
 <script src="modules.js"></script>
 <script src="shared/shell.js"></script>
+<script src="shared/attendance.js"></script>
 <style>
   .lead{margin:8px 0 22px;color:var(--ink-2);font-size:15px;max-width:680px}
   .sc{border:1px solid var(--line);border-radius:14px;padding:18px;background:#fff;margin-bottom:16px}
@@ -38,11 +39,13 @@ const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",da
 const fmt = s => { const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`; };
 
-let noReplies = false, batchSel = "";
+let noReplies = false, batchSel = "", cal = [], calErr = false, PPL = [];   // PPL: People tab (Settings), for onboardees of new batches
 const TEST_BATCHES = ["000000", "000001"];   // test accounts: left out of "All batches"; pick the batch to see them
 async function load(){
   $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading replies from the Sheet…</p>';
-  const res = await LMS.adminRsvps();
+  const [res, cr, pp] = await Promise.all([LMS.adminRsvps(), LMS.syncCalSessions().then(r => r !== null, () => false), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null]);
+  PPL = (pp && pp.ok && pp.people) || []; if (window.Attendance) Attendance.reload();
+  cal = LMS.calSessions(); calErr = !cr;
   if (res && res.error === "not-admin") { $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Your email isn\'t an admin.</p>'; return; }
   noReplies = !res || !res.ok;   // still show the sessions; replies come once the Sheet answers (or Code.gs is redeployed)
   render((res && res.rsvps) || []);
@@ -54,9 +57,25 @@ function render(rows){
   rows.slice().sort((a,b) => String(a.Timestamp).localeCompare(String(b.Timestamp))).forEach(r => { latest[String(r.Email).toLowerCase() + "|" + r["Session ID"]] = r; });
   const R = LMS.roster(), now = new Date();
   const bl = s => s.batch ? [].concat(s.batch) : [];
-  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl))].sort();
-  const sessions = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).map(s => ({ ...s, d:new Date(s.when) })).sort((a,b) => a.d - b.d);
+  const allBatches = [...new Set((window.LMS_SESSIONS || []).flatMap(bl).concat(cal.flatMap(s => s.batches || [])))].sort();
+  // Google Calendar events (salesops calendar, Code.gs calSessions) plus modules.js sessions; a modules.js one at the same start time as a calendar one is left out
+  const calList = cal.filter(s => batchSel ? (s.batches || []).includes(batchSel) : (s.batches || []).some(b => !TEST_BATCHES.includes(b)) || !(s.batches || []).length).map(s => ({ ...s, cal:true }));
+  const legacy = (window.LMS_SESSIONS || []).filter(s => !batchSel || !s.batch || bl(s).includes(batchSel)).filter(s => !cal.some(c => +new Date(c.when) === +new Date(s.when)));
+  const sessions = legacy.concat(calList).map(s => ({ ...s, d:new Date(s.when) })).sort((a,b) => a.d - b.d);
+  const LBL = { yes:"Yes", no:"No", maybe:"Maybe" };
+  const calCard = s => {
+    const admins = R.admins.map(a => a.toLowerCase());
+    const list = (s.guests || []).filter(g => !admins.includes(g.email)).sort((x, y) => ({ no:0, maybe:1, "":2, yes:3 }[x.status] - { no:0, maybe:1, "":2, yes:3 }[y.status]) || x.email.localeCompare(y.email));
+    const n = a => list.filter(x => x.status === a).length;
+    return `<div class="sc"><h3>${esc(s.title)} <span class="pill none" style="font-size:11px;vertical-align:middle">Google Calendar</span></h3>
+      <div class="meta">${esc(fmt(s))} · Room: ${s.room ? esc(s.room) : "None"} · Meeting link: ${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link.replace(/^https?:\/\//, ""))}</a>` : "None"}${(s.batches || []).length ? ` · Batch ${esc(s.batches.join(", "))}` : ""}${Object.keys(s.days || {}).filter(b => s.days[b]).map(b => ` · Day ${s.days[b]} for ${esc(b)}`).join("")}${s.desc ? `<br><span style="white-space:pre-line">${esc(s.desc)}</span>` : ""}</div>
+      <div class="counts"><span class="pill yes">Yes ${n("yes")}</span><span class="pill no">No ${n("no")}</span><span class="pill none">Maybe ${n("maybe")}</span><span class="pill none">No reply ${n("")}</span></div>
+      <div class="scroll"><table class="tbl"><thead><tr><th>Guest</th><th>Reply in Calendar</th></tr></thead><tbody>
+      ${list.map(g => `<tr><td><b>${esc(nameOf(g.email))}</b><div class="small muted">${esc(g.email)}</div></td><td>${g.status ? `<span class="pill ${g.status === "maybe" ? "none" : g.status}">${LBL[g.status]}</span>` : '<span class="pill none">No reply yet</span>'}</td></tr>`).join("") || '<tr><td colspan="2" class="muted">No guests invited.</td></tr>'}
+      </tbody></table></div></div>`;
+  };
   const card = s => {
+    if (s.cal) return calCard(s);
     const expected = (s.batch ? bl(s).filter(b => batchSel ? b === batchSel : !TEST_BATCHES.includes(b)).flatMap(b => R.batches[b] || []) : R.learners).map(e => e.toLowerCase());
     const replies = Object.values(latest).filter(r => r["Session ID"] === s.id);
     const emails = [...new Set([...expected, ...replies.map(r => String(r.Email).toLowerCase())])].filter(e => !R.admins.map(a => a.toLowerCase()).includes(e));
@@ -66,17 +85,32 @@ function render(rows){
     return `<div class="sc"><h3>${esc(s.title)}</h3>
       <div class="meta">${esc(fmt(s))} · Room: ${s.room ? esc(s.room) : "None"} · Meeting link: ${s.link ? `<a href="${esc(s.link)}" target="_blank" rel="noopener">${esc(s.link.replace(/^https?:\/\//, ""))}</a>` : "None"}${s.batch ? ` · Batch ${esc(bl(s).join(", "))}` : ""}${s.desc ? `<br>${esc(s.desc)}` : ""}</div>
       <div class="counts"><span class="pill yes">Yes ${n("yes")}</span><span class="pill no">No ${n("no")}</span><span class="pill none">No reply ${n("")}</span></div>
-      <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Reply</th><th>Informed team lead</th><th>Message to trainer</th><th>When</th></tr></thead><tbody>
-      ${list.map(({ e, r, a }) => `<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${a ? `<span class="pill ${a}">${a === "yes" ? "Yes" : "No"}</span>` : '<span class="pill none">No reply yet</span>'}</td><td>${a === "no" ? (r["Informed TL"] === "Yes" ? "Yes" : "—") : ""}</td><td>${esc(String(r && r.Note || "").replace(/^'/, ""))}</td><td class="small muted">${r ? esc(when(r.Timestamp)) : ""}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No onboardees on the list.</td></tr>'}
+      <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Reply (in the hub)</th><th>When</th></tr></thead><tbody>
+      ${list.map(({ e, r, a }) => `<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${a ? `<span class="pill ${a}">${a === "yes" ? "Yes" : "No"}</span>` : '<span class="pill none">No reply</span>'}</td><td class="small muted">${r ? esc(when(r.Timestamp)) : ""}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">No onboardees on the list.</td></tr>'}
       </tbody></table></div></div>`;
   };
   const up = sessions.filter(s => new Date(s.d.getTime() + (s.minutes||60)*60000) >= now), past = sessions.filter(s => !up.includes(s));
+  const bar = `<div class="bar" style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="refresh">Refresh</button><label class="small muted">Batch <select id="bsel" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px"><option value="">Pick a batch</option>${allBatches.map(b => `<option value="${esc(b)}" ${b === batchSel ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label></div>`;
+  if (!batchSel) {   // pick a batch first: nothing else shows until then
+    $("app").innerHTML = `<h1>Sessions</h1>${bar}<p class="muted">Pick a batch to see its sessions, replies and attendance.</p>`;
+    $("refresh").onclick = load; $("bsel").onchange = e => { batchSel = e.target.value; render(rows); }; return;
+  }
   $("app").innerHTML = `<h1>Sessions</h1>
-    <p class="lead">Who said Yes or No to each live or self-paced session. New sessions show up here once they are added to <code>LMS_SESSIONS</code> in modules.js.</p>
+    ${calErr ? '<p class="muted" style="margin:0 0 12px">The calendar couldn\'t be read (Code.gs needs redeploying, or calendar access isn\'t allowed yet).</p>' : ""}
     ${noReplies ? '<p class="muted" style="margin:0 0 12px">Replies couldn\'t be loaded (the Sheet didn\'t answer, or Code.gs needs redeploying), so everyone shows as "No reply yet".</p>' : ""}
-    <div class="bar" style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="refresh">Refresh</button><label class="small muted">Batch <select id="bsel" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px"><option value="">All batches</option>${allBatches.map(b => `<option value="${esc(b)}" ${b === batchSel ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label></div>
-    <h2 class="sec">Upcoming</h2>${up.map(card).join("") || '<p class="muted">No upcoming sessions.</p>'}
-    ${past.length ? `<h2 class="sec">Past</h2>${past.map(card).join("")}` : ""}`;
+    ${bar}
+    <h2 class="sec">Attendance tracker</h2><p class="small muted" style="margin:-6px 0 12px">Only trainers see this. Click a box to mark Present, Absent or On leave and add a note. "All present" marks everyone without a mark yet; change anyone after.</p>
+    <div id="att"></div>
+    <h2 class="sec">Upcoming</h2><p class="small muted" style="margin:-6px 0 12px">Synced from Google Calendar: salesops-calendar events with "Day N" or "Onboarding" in the title. Replies are what each guest answered in Calendar (updates within about 5 minutes).</p>
+    ${up.map(card).join("") || '<p class="muted">No upcoming sessions.</p>'}
+    <h2 class="sec">Past</h2><p class="small muted" style="margin:-6px 0 12px">Synced from Google Calendar (the last 3 weeks). Older sessions from before the sync show the Yes/No given in the hub.</p>
+    ${past.map(card).join("") || '<p class="muted">No past sessions.</p>'}`;
+  if (window.Attendance) {   // people of this batch: roster.js, the People tab, and calendar guests of this batch's sessions
+    const adm = R.admins.map(a => a.toLowerCase());
+    const ppl = [...(R.batches[batchSel] || []), ...PPL.filter(p => p.active && String(p.batch) === batchSel && !(p.access || []).some(a => /^admin$/i.test(a))).map(p => p.email)]
+      .map(e => String(e).toLowerCase()).filter(e => !adm.includes(e));
+    Attendance.mount($("att"), { batch: batchSel, nameOf, people: ppl, sessions: sessions.filter(s => s.id).map(s => ({ id: s.id, title: s.title, when: s.when })) });
+  }
   $("refresh").onclick = load;
   $("bsel").onchange = e => { batchSel = e.target.value; render(rows); };
 }

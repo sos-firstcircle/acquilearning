@@ -365,25 +365,18 @@ window.LMS_CONFIG = {
     loadSettings(){ return send("getSettings", {}, { retry:true }).then(res => { if (res && res.ok) write("settings", res.settings || {}); return res && res.ok ? res.settings : null; }); },
     setSetting(key, value){ return send("setSetting", { key, value }).then(res => { if (res && res.ok) write("settings", { ...(read("settings", {}) || {}), [key]: value }); return res; }); },
 
-    /** Yes/No replies to live sessions: { sessionId: { answer:"yes"|"no", note, informed, at } }. The Sheet's Sessions tab is the source of truth; the browser copy is a cache. */
-    rsvps(){ return read("rsvp." + ((currentUser()||{}).email||""), {}); },
-    saveRsvp(id, answer, note, informed){
-      const all = LMS.rsvps(); all[id] = { answer, note: note || "", informed: !!informed, at: Date.now() };
-      write("rsvp." + ((currentUser()||{}).email||""), all);
-      return send("saveRsvp", { id, answer, note: note || "", informed: !!informed });
-    },
-    syncRsvps(){
+    /** Sessions from the salesops Google Calendar (events this person is a guest of; admins get all, with guests and batches). Cached in this browser so the page shows them at once. */
+    calSessions(){ return read("cal." + ((currentUser()||{}).email||""), []); },
+    syncCalSessions(){
       if (C.demo || !C.backendUrl || !currentUser()) return Promise.resolve(false);
-      return send("myRsvps", {}, { retry:true }).then(res => {
-        if (!res || !res.ok) return false;
-        const local = LMS.rsvps(), merged = { ...(res.rsvps || {}) }, now = Date.now();
-        Object.entries(local).forEach(([id, r]) => { if (now - (r.at || 0) < 60000) merged[id] = r; });   // very recent local reply the Sheet may not have yet
-        const changed = JSON.stringify(merged) !== JSON.stringify(local);
-        write("rsvp." + currentUser().email, merged);
-        return changed;
-      }).catch(() => false);
+      return send("calSessions", {}, { retry:true }).then(res => {
+        if (!res || !res.ok) return null;   // null = couldn't read the calendar
+        const before = JSON.stringify(LMS.calSessions()), list = res.sessions || [];
+        write("cal." + currentUser().email, list);
+        return JSON.stringify(list) !== before;
+      }).catch(() => null);
     },
-    /** Admin only: every reply (all rows of the Sessions tab). */
+    /** Admin only: every old hub Yes/No reply (Sessions tab; from before replies moved to Google Calendar). */
     adminRsvps(){ return send("adminRsvps", {}, { retry:true }); },
 
     chat(question){ return send("chat", { question }, { timeout: 60000 }); },

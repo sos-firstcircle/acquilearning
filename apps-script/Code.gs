@@ -69,6 +69,9 @@ const SETTINGS_HEADER = ["Key", "Value", "Updated", "By"];
 // Yes/No replies to live sessions. One row per reply; the latest row per person + session wins. Shown to trainers on sessions.html.
 const SESSIONS_SHEET = "Sessions";
 const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Answer", "Note", "Informed TL"];
+// Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / absent / leave / "" (cleared).
+const ATTENDANCE_SHEET = "Attendance";
+const ATTENDANCE_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Session", "Status", "Note", "By"];
 const EXAM_TAB_HEADER = ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details"];
 // Exams whose tab needs a different header (default is EXAM_TAB_HEADER). The Connect sim also records the step-by-step breakdown and trainer notes.
 const EXAM_TAB_HEADERS = { "d4-exam-connect-sim": ["Timestamp", "Email", "Name", "Batch", "Attempt", "Score", "Max", "Percent", "Passed", "Details", "Breakdown", "Notes"] };
@@ -218,6 +221,25 @@ function doPost(e) {
       });
       return json_({ ok: true, rsvps: out });
     }
+    if (req.action === "adminAttendance") {
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      return json_({ ok: true, rows: readRows_(ATTENDANCE_SHEET) });
+    }
+    if (req.action === "saveAttendance") {     // admins: marks for one or more people (Mark all present sends several at once)
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const safe = function (v, n) { v = String(v == null ? "" : v).replace(/^'+/, "").slice(0, n); return /^[=+\-@]/.test(v) ? "'" + v : v; };
+      const rows = (Array.isArray(p.rows) ? p.rows : []).slice(0, 300).filter(function (r) {
+        return /^[^@\s]+@firstcircle\.com$/i.test(String(r.email || "").trim()) && /^[A-Za-z0-9_.:-]{1,60}$/.test(String(r.session || "")) && ["present", "absent", "leave", ""].indexOf(String(r.status || "")) !== -1;
+      });
+      if (!rows.length) throw new Error("bad-input");
+      const sh = sheet_(ATTENDANCE_SHEET, ATTENDANCE_HEADER), now = new Date();
+      rows.forEach(function (r) {
+        const b = String(r.batch || "").replace(/[^0-9]/g, "").slice(0, 6);
+        appendByHeader_(sh, { "Timestamp": now, "Email": String(r.email).trim().toLowerCase(), "Name": safe(r.name, 100), "Batch": b ? "'" + b : "", "Session ID": String(r.session),
+          "Session": safe(r.title, 150), "Status": String(r.status || ""), "Note": safe(r.note, 1000), "By": user.email });
+      });
+      return json_({ ok: true, saved: rows.length });
+    }
     if (req.action === "adminRsvps") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
       return json_({ ok: true, rsvps: readRows_(SESSIONS_SHEET) });
@@ -238,6 +260,20 @@ function doPost(e) {
       }
       appendByHeader_(sh, { "Key": key, "Value": val, "Updated": new Date(), "By": user.email });
       return json_({ ok: true });
+    }
+    if (req.action === "calSessions") {         // sessions from the salesops Google Calendar: a person sees the events they are a guest of
+      const admin = isAdmin_(user.email), me = String(user.email).toLowerCase();
+      const list = calEvents_().filter(function (ev) { return admin || ev.guests.some(function (g) { return g.email === me; }); }).map(function (ev) {
+        const o = { id: ev.id, title: ev.title, when: ev.when, minutes: ev.minutes, room: ev.room, link: ev.link, desc: ev.desc, day: calDay_(user.batch, ev) };
+        const mine = ev.guests.filter(function (g) { return g.email === me; })[0];
+        o.my = mine ? mine.status : "";
+        if (admin) {                                                                     // guest emails only go to admins
+          o.guests = ev.guests; o.batches = ev.guests.map(function (g) { return batchOfEmail_(g.email); }).filter(function (b, i, a) { return b && a.indexOf(b) === i; });
+          o.days = {}; o.batches.forEach(function (b) { o.days[b] = calDay_(b, ev); });
+        }
+        return o;
+      });
+      return json_({ ok: true, sessions: list });
     }
     if (req.action === "whoami") return json_({ ok: true, me: me_(user), email: user.email, name: user.name, batch: user.batch || "", google: !!req.gtoken });
     if (req.action === "directory") {           // any signed-in person: the org chart (names, roles, teams only; no emails)
@@ -648,4 +684,67 @@ function setting_(key) {
   if (hit) all = JSON.parse(hit);
   else { all = {}; readRows_(SETTINGS_SHEET).forEach(function (r) { if (r.Key) all[r.Key] = String(r.Value); }); try { cache.put("settings_v1", JSON.stringify(all), 30); } catch (e) {} }
   return all[key] || "";
+}
+
+/* ---------- Sessions from Google Calendar ---------- */
+// Events on the salesops calendar (Settings key "sessionsCalendar" = another calendar's ID; empty = the main one) from 3 weeks back to ~2.5 months ahead.
+// Only events whose title has "Day N" or "Onboarding" are used. Which day it shows under comes from its DATE (calDay_), not the title.
+// Uses the Google Calendar API service if it's added in the editor (Services > Google Calendar API: gives the Meet link); otherwise CalendarApp. Cached 5 minutes.
+const CAL_FROM = "2026-11-24";   // calendar events before this date are ignored (older sessions stay hardcoded in LMS_SESSIONS, modules.js)
+const CAL_TITLE = /\bday\s*\d{1,2}\b|onboarding/i;
+function calEvents_() {
+  const cache = CacheService.getScriptCache(), hit = cache.get("cal_v1");
+  if (hit) return JSON.parse(hit);
+  const calId = setting_("sessionsCalendar") || "primary", now = Date.now();
+  const start = new Date(Math.max(now - 21 * 864e5, new Date(CAL_FROM + "T00:00:00+08:00").getTime())), end = new Date(now + 75 * 864e5), raw = [];
+  const st = function (s) { s = String(s || "").toLowerCase(); return s === "accepted" || s === "yes" ? "yes" : s === "declined" || s === "no" ? "no" : s === "tentative" || s === "maybe" ? "maybe" : ""; };
+  if (typeof Calendar !== "undefined" && Calendar.Events) {
+    let token = null;
+    do {
+      const r = Calendar.Events.list(calId, { timeMin: start.toISOString(), timeMax: end.toISOString(), singleEvents: true, orderBy: "startTime", maxResults: 250, pageToken: token });
+      (r.items || []).forEach(function (ev) {
+        if (!ev.start || !ev.start.dateTime || ev.status === "cancelled") return;   // all-day events are skipped
+        raw.push({ src: ev.id, title: ev.summary || "", start: new Date(ev.start.dateTime), end: new Date(ev.end.dateTime), room: ev.location || "", desc: ev.description || "", link: ev.hangoutLink || "",
+          guests: (ev.attendees || []).filter(function (a) { return a.email && !a.self && !a.resource && !a.organizer; }).map(function (a) { return { email: String(a.email).toLowerCase(), status: st(a.responseStatus) }; }) });
+      });
+      token = r.nextPageToken;
+    } while (token && raw.length < 1000);
+  } else {
+    const cal = calId === "primary" ? CalendarApp.getDefaultCalendar() : CalendarApp.getCalendarById(calId);
+    if (!cal) throw new Error("calendar-not-found");
+    cal.getEvents(start, end).forEach(function (ev) {
+      if (ev.isAllDayEvent()) return;
+      raw.push({ src: ev.getId() + "|" + ev.getStartTime().getTime(), title: ev.getTitle(), start: ev.getStartTime(), end: ev.getEndTime(), room: ev.getLocation(), desc: ev.getDescription(), link: "",
+        guests: ev.getGuestList().map(function (g) { return { email: String(g.getEmail()).toLowerCase(), status: st(g.getGuestStatus()) }; }) });
+    });
+  }
+  const out = raw.filter(function (ev) { return CAL_TITLE.test(ev.title); }).map(function (ev) {
+    const text = String(ev.desc || "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li)>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/\n{3,}/g, "\n\n").trim();
+    const meet = (String(ev.room || "") + " " + text).match(/https:\/\/meet\.google\.com\/[a-z0-9-]+/i);
+    const dm = ev.title.match(/^\s*day\s*(\d{1,2})\b/i);
+    const id = "cal-" + Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, ev.src).slice(0, 6).map(function (b) { return ("0" + (b & 255).toString(16)).slice(-2); }).join("");
+    return { id: id, title: ev.title, when: Utilities.formatDate(ev.start, "Asia/Manila", "yyyy-MM-dd'T'HH:mm") + "+08:00", minutes: Math.round((ev.end - ev.start) / 60000),
+      room: /meet\.google\.com/i.test(ev.room) ? "" : String(ev.room || "").slice(0, 200), link: ev.link || (meet ? meet[0] : ""), desc: text.slice(0, 800), day: dm ? Number(dm[1]) : 0, guests: ev.guests };
+  });
+  try { cache.put("cal_v1", JSON.stringify(out), 300); } catch (e) {}
+  return out;
+}
+/** Day number of an event for a batch, by date: the batch start date is Day 1, then one day per weekday (Mon-Fri; holidays still count).
+    Start = the Batches tab Start, else the batch number itself (MMDDYY). Weekend events, events before the start, or no start date: the "Day N" in the title (0 if none). */
+function calDay_(batch, ev) {
+  const b = (batches_().filter(function (x) { return x.batch === batch; })[0] || {}).start || "";
+  let start = /^\d{4}-\d{2}-\d{2}$/.test(b) ? b : "";
+  if (!start && /^\d{6}$/.test(batch || "")) { const m = +batch.slice(0, 2), d = +batch.slice(2, 4); if (m >= 1 && m <= 12 && d >= 1 && d <= 31) start = "20" + batch.slice(4) + "-" + batch.slice(0, 2) + "-" + batch.slice(2, 4); }
+  const ymd = function (s) { const p = s.split("-"); return Date.UTC(+p[0], +p[1] - 1, +p[2]); };
+  if (start) {
+    const s0 = ymd(start), e0 = ymd(String(ev.when).slice(0, 10)), wd = new Date(e0).getUTCDay();
+    if (e0 >= s0 && wd !== 0 && wd !== 6) { let n = 0; for (let t = s0; t <= e0; t += 864e5) { const w = new Date(t).getUTCDay(); if (w !== 0 && w !== 6) n++; } return n; }
+  }
+  return ev.day || 0;
+}
+/** Batch of an email: the BATCHES list in this file, else the People tab. */
+function batchOfEmail_(em) {
+  const k = Object.keys(BATCHES).filter(function (b) { return BATCHES[b].indexOf(em) !== -1; })[0];
+  if (k) return k;
+  const pr = people_()[em]; return pr ? pr.batch || "" : "";
 }

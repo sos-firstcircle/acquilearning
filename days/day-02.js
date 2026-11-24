@@ -16,7 +16,7 @@ LMS_DAY_DEFS[2] = {
   ...(D2_SKIP_CARD.includes(D2_BATCH) ? {} : {
     exam: { id: "d2-exam-business-card", label: "Business Card & Contact Details", href: "lessons/d02-exam-business-card.html", kind: "lms", passing: 100 }
   }),
-  sessions: ["s-d2-f2f"],   // ids from LMS_SESSIONS in modules.js; shown at the bottom of the dropdown with a Yes/No
+  sessions: ["s-d2-f2f", "s-d2-f2f-112326"],   // ids from LMS_SESSIONS in modules.js; shown at the bottom of the dropdown with a Yes/No
   materials: [
     { label: "Additional reading: AM Success Playbook", href: "https://app.notion.com/p/27f1a5890448807ba169ede63f57759f?pvs=25" }
   ]
