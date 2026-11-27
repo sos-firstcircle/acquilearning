@@ -361,7 +361,8 @@ function renderExisting(){
   const u = LMS.user(), P = LMS.progress(), done = id => P[id] && P[id].status === "done";
   const all = window.LMS_EXISTING.flatMap(s => s.groups.flatMap(g => g.items)), nDone = all.filter(i => done(i.id)).length;
   const h = new Date().getHours(), greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
-  const tile = i => `<a class="ex-tile ${done(i.id)?"done":""}" href="${esc(i.href)}" data-ex="${esc(i.id)}"><span class="k">${EX_KIND[i.kind]}</span><span class="t">${esc(i.label)}</span>${done(i.id)?`<span class="ck">${CHECK_ICON}</span>`:""}</a>`;
+  const hrefOf = i => i.kind === "exam" ? i.href + (i.href.includes("?") ? "&" : "?") + "from=sims" : i.href;   // graded sims opened from here can be retaken (generalRetake in lms.js)
+  const tile = i => `<a class="ex-tile ${done(i.id)?"done":""}" href="${esc(hrefOf(i))}" data-ex="${esc(i.id)}"><span class="k">${EX_KIND[i.kind]}</span><span class="t">${esc(i.label)}</span>${done(i.id)?`<span class="ck">${CHECK_ICON}</span>`:""}</a>`;
   const sec = s => `<section class="ex-sec"><h2>${esc(s.title)}</h2><p class="subt">${esc(s.sub||"")}</p>${s.groups.map(g => `<h3>${esc(g.label)}</h3><div class="ex-grid">${g.items.map(tile).join("")}</div>`).join("")}</section>`;
   document.getElementById("app").innerHTML = `
     <div class="hello"><div><h1>${greet}, ${esc(LMS.firstName(u.name))}</h1><p>Pick anything, in any order. Hover a tile to preview it.</p></div>
@@ -372,7 +373,7 @@ function renderExisting(){
   const hide = () => { clearTimeout(timer); pop.style.display = "none"; };
   const show = tileEl => {
     const i = byId(tileEl.dataset.ex); if (!i) return;
-    pop.href = i.href;
+    pop.href = hrefOf(i);
     pop.innerHTML = `<img src="existing/thumbs/${esc(i.thumb)}.jpg" alt=""><div class="b"><div class="k">${EX_KIND[i.kind]}</div><div class="t">${esc(i.label)}</div><div class="d">${esc(i.desc||"")}</div>${done(i.id)?`<span class="ok">${CHECK_ICON} Done</span><span class="go">${i.kind==="exam"?"Retake":"Open again"}</span>`:`<span class="go">${i.kind==="exam"?"Start":"Open"}</span>`}</div>`;
     pop.style.display = "block";
     const r = tileEl.getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;

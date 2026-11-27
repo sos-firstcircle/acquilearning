@@ -31,6 +31,7 @@ window.LMS_CONFIG = {
   // (for people who did those days before this site existed). Delete a line to turn it off.
   // Batches allowed to retake exams. Everyone else gets one attempt per exam.
   multiAttempt: ["000001", "000002"],
+  generalRetake: ["d4-exam-connect-sim", "exam-acqui-day9"],   // graded sims anyone with General (Simulations) access can retake, ONLY when opened from the Simulations page (?from=sims). Same list as GENERAL_RETAKE in Code.gs
   codeLogin: ["000002"],              // shared-login batches that also need a personal access code (checked by the Sheet's "Codes" tab; the codes are never in this repo)
   honorCode: ["000002"],              // batches that share one login: exams ask for a typed name first (saved with the result as a Note)
   noReview: ["000002"],               // batches that can retake but cannot reopen their last answers/result
@@ -69,6 +70,7 @@ window.LMS_CONFIG = {
     const hit = find(e); if (hit) return hit;
     const su = storedUser(); return su && su.people && su.email === e ? (su.batch || "") : ""; }   // signed in from the People tab (Settings)
   /* Signed in from the People tab: their Access list (e.g. ["Department","General","112326"]). */
+  function fromSims(){ try { return /[?&]from=sims\b/.test(location.search); } catch(e){ return false; } }   // opened from the Simulations page
   function accessOf(){ const u = storedUser(); return u ? ((u.people ? u.access : u.peopleAccess) || []).map(a => String(a).toLowerCase()) : []; }   // old-list sign-ins who are also on the People tab keep their Access in peopleAccess
   const lc = a => (a||[]).map(e => String(e).trim().toLowerCase());
   function isCompanyEmail(email){
@@ -190,7 +192,7 @@ window.LMS_CONFIG = {
     roster, batchOf,
 
     /** May the signed-in person retake exams? (their batch is listed in multiAttempt) */
-    canRetake(){ const u = currentUser(); return !!u && ((C.multiAttempt || []).includes(batchOf(u.email)) || !!u.retake); },
+    canRetake(id){ const u = currentUser(); return !!u && ((C.multiAttempt || []).includes(batchOf(u.email)) || !!u.retake || (!!id && fromSims() && (C.generalRetake || []).includes(id) && LMS.hasAccess("general"))); },
 
     /** Honor code (shared-login batches in C.honorCode): the exam intro shows a pledge and a name box; the name is saved with the result. */
     honorRequired(){ const u = currentUser(); return !!u && !u.code && (C.honorCode || []).includes(batchOf(u.email)) && !isPreview(); },   // not needed once the person signed in with their own code (their name is known)
@@ -354,7 +356,7 @@ window.LMS_CONFIG = {
       p[id] = rec;
       write(progressKey(), p);
       const honor = LMS.honorRequired() && LMS.honorName ? "Honor code: " + LMS.honorName + (result.details ? " | " : "") : "";
-      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "", items:result.items || "" });
+      send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, sims:fromSims() ? 1 : 0, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "", items:result.items || "" });
       if (onSimPage()) LMS.simLog(id, { type:"Exam", score:result.score, max:result.max, passed:!!result.passed, result:result.passed ? "Passed" : "Not passed" });
       return Promise.resolve(p[id]);
     },

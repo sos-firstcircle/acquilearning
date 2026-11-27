@@ -36,6 +36,10 @@ const ADMIN_PASSCODE = "";
 
 // Batches that may retake exams. Everyone else gets one attempt per exam (enforced here, not just in the browser).
 const RETAKE_BATCHES = ["000001", "000002"];
+// Graded sims anyone with General (Simulations) access may retake any time, only when opened from the Simulations page (p.sims). Those extra attempts are tagged "Simulations retake" in Details
+// and the Grades page leaves them out of the batch view (onboarding grades stay their first counted attempt). Same list as generalRetake in lms.js.
+const GENERAL_RETAKE = ["d4-exam-connect-sim", "exam-acqui-day9"];
+const SIM_RETAKE_TAG = "Simulations retake";
 
 // Shared-login batches: everyone types the same email, then a personal access code.
 // The codes live ONLY in the Sheet tab below (never in the repo): columns  Token | Name | Status
@@ -114,11 +118,14 @@ function doPost(e) {
 
     if (req.action === "saveResult") {
       const rz = resetAt_(user.email);   // attempts from before an admin's reset don't count
-      if (!canRetake_(user.batch) && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id && afterReset_(r, rz); })) {
-        return json_({ ok: false, error: "already-taken" });
+      let simRetake = false;
+      if (!canRetake_(user.batch) && readRows_(GRADES_SHEET).some(function (r) { return String(r.Email).toLowerCase() === user.email && r["Exam ID"] === p.id && afterReset_(r, rz) && String(r.Details || "").indexOf(SIM_RETAKE_TAG) === -1; })) {
+        if (p.sims && GENERAL_RETAKE.indexOf(p.id) !== -1 && hasGeneral_(user.email)) simRetake = true;   // only when taken from the Simulations page
+        else return json_({ ok: false, error: "already-taken" });
       }
-      const rs = useRetake_(user.email, p.id);   // first attempt after a reset: noted in Details
-      const det = String(p.details || "") + (rs ? (p.details ? " | " : "") + "From reset " + rs.n + " (by " + rs.by + ", " + Utilities.formatDate(rs.at, "Asia/Manila", "MMM d, yyyy h:mm a") + ")" : "");
+      const rs = simRetake ? null : useRetake_(user.email, p.id);   // first attempt after a reset: noted in Details
+      let det = String(p.details || "") + (rs ? (p.details ? " | " : "") + "From reset " + rs.n + " (by " + rs.by + ", " + Utilities.formatDate(rs.at, "Asia/Manila", "MMM d, yyyy h:mm a") + ")" : "");
+      if (simRetake) det = SIM_RETAKE_TAG + (det ? " | " + det : "");
       const pct = p.max ? Math.round((p.score / p.max) * 1000) / 10 : "";
       const gsh = sheet_(GRADES_SHEET, GRADES_HEADER); ensureColumn_(gsh, "Items");
       const items = /^\{[\s\S]*\}$/.test(String(p.items || "")) && String(p.items).length <= 45000 ? String(p.items) : "";   // JSON only
@@ -725,6 +732,8 @@ function isAdmin_(email) {
   return !!pr && pr.active && pr.access.some(function (a) { return a.toLowerCase() === "admin"; });
 }
 /** Retakes: the old list in this file, or Retake = Yes on the Batches tab. */
+/** Has General (Simulations) access on the People tab. */
+function hasGeneral_(email) { const pr = people_()[String(email || "").toLowerCase().replace(/\+[^@]*@/, "@")]; return !!pr && pr.active && (pr.access || []).some(function (a) { return String(a).toLowerCase() === "general"; }); }
 function canRetake_(batch) { return RETAKE_BATCHES.indexOf(batch) !== -1 || batches_().some(function (b) { return b.batch === batch && b.retake; }); }
 
 /** What the site needs to know about the signed-in person (People tab), or null if they're not on it. */

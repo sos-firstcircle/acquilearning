@@ -345,7 +345,7 @@
     box.innerHTML = '<div class="k">Graded exam</div><h2>' + esc(CFG.title) + '</h2><p style="font-size:15px;line-height:1.55">You already took this exam, and it can only be taken once. Your score: <b>' + Math.round(rec.score / rec.max * 100) + '%</b>.</p><div class="row"><span></span><a class="btn dark" href="../dashboard.html" style="text-decoration:none">Back to dashboard</a></div>';
   }
   if (G && window.LMS && !(LMS.preview && LMS.preview())) {
-    var go = function(){ if (state !== "idle" || document.getElementById("exgo")) return; var rec = (LMS.progress() || {})[CFG.examId]; (rec && rec.status === "done" && !(LMS.canRetake && LMS.canRetake())) ? taken(rec) : intro(); };
+    var go = function(){ if (state !== "idle" || document.getElementById("exgo")) return; var rec = (LMS.progress() || {})[CFG.examId]; (rec && rec.status === "done" && !(LMS.canRetake && LMS.canRetake(CFG.examId))) ? taken(rec) : intro(); };
     dim.style.display = "block"; (LMS.ready || Promise.resolve()).then(go, go); setTimeout(go, 8000);
   } else intro();
 })();

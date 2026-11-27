@@ -301,7 +301,8 @@ function render(){
   const RZ = {}; (DATA.retakes || []).forEach(r => { if (/^y/i.test(String(r.Cancelled || ""))) return; const k = String(r.Email).toLowerCase() + "|" + r["Exam ID"], t = new Date(r.Timestamp).getTime() || 0; if (t > (RZ[k] || 0)) RZ[k] = t; });   // latest reset per person + exam
   const preReset = r => { const t = RZ[r.Email + "|" + r["Exam ID"]]; return !!t && (new Date(r.Timestamp).getTime() || 0) <= t; };
   const gAll = DATA.grades.filter(shown).map(r => ({ ...r, Email:String(r.Email||"").toLowerCase(), Batch:bn(r.Batch), p:pct(r) }));
-  const g = gAll.filter(r => !preReset(r));   // attempts from before a reset don't count anywhere on this page
+  const simRe = r => /Simulations retake/.test(String(r.Details || ""));   // extra tries from Simulations (General access): shown in the Simulations view only
+  const g = gAll.filter(r => !preReset(r) && !simRe(r));   // attempts from before a reset don't count anywhere on this page
   const PB = {}; (DATA.people || []).forEach(p => { if (p.active && p.batch && !(p.access || []).some(a => /^admin$/i.test(a))) PB[String(p.email).toLowerCase()] = bn(p.batch); });   // People tab (Settings)
   const bOf = e => LMS.batchOf(e) || PB[e] || (g.find(r => r.Email === e && r.Batch) || {}).Batch || "";
   const R = LMS.roster(), admins = R.admins.map(a=>a.toLowerCase());
@@ -401,7 +402,7 @@ function render(){
     const bsel = $("bf").value;
     const rows = gAll.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
     const pg = Pager.page("rows", rows, pgDef);
-    $("rows").innerHTML = pg.rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}${preReset(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An admin reset this exam after this attempt, so it no longer counts">Before reset · not counted</span></div>' : ""}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    $("rows").innerHTML = pg.rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}${preReset(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An admin reset this exam after this attempt, so it no longer counts">Before reset · not counted</span></div>' : simRe(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An extra try from Simulations. Counts in the Simulations view, not in batch grades">Simulations retake · not counted here</span></div>' : ""}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
     $("rowsPg").innerHTML = pg.bar; Pager.wire($("rowsPg"), draw);
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;

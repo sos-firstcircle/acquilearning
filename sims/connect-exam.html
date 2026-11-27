@@ -2071,12 +2071,12 @@ $("#finishNo").onclick=()=>$("#finishOv").classList.add("hidden");
 $("#finishYes").onclick=()=>finish(false);
 $("#whoAmI").textContent=ME.name+(MY_BATCH?" · Batch "+MY_BATCH:"")+" ("+ME.email+")";
 (function oneAttempt(){      // everyone except batches in LMS.config.multiAttempt gets a single attempt
- const sb=$("#startBtn"), sbText=sb.textContent; if(!LMS.canRetake() && !LMS.preview()){ sb.disabled=true; sb.textContent="Checking…"; }   // retake batches never need the check   // wait (at most 8s) until we know if it was already taken
+ const sb=$("#startBtn"), sbText=sb.textContent; if(!LMS.canRetake(EXAM_ID) && !LMS.preview()){ sb.disabled=true; sb.textContent="Checking…"; }   // retake batches never need the check   // wait (at most 8s) until we know if it was already taken
  let blocked=false;
  function apply(){
   if(blocked) return;
   const rec=LMS.progress()[EXAM_ID];
-  if(rec && rec.status==="done" && !LMS.canRetake()){
+  if(rec && rec.status==="done" && !LMS.canRetake(EXAM_ID)){
     blocked=true; sb.disabled=true; sb.textContent="Already taken";
     sb.insertAdjacentHTML("afterend",'<span class="hint" style="align-self:center">You have already taken this exam. Ask Salesops if you need another attempt.</span>');
   } else { sb.disabled=!LMS.honorOk(); sb.textContent=sbText; }
@@ -2086,7 +2086,7 @@ $("#whoAmI").textContent=ME.name+(MY_BATCH?" · Batch "+MY_BATCH:"")+" ("+ME.ema
 (function showLast(){
   let r=null; try{ r=JSON.parse(localStorage.getItem("amacademy.d4last."+ME.email)||"null"); }catch(e){}
   if(!r || !LMS.canReview()) return;   // batches in noReview (shared/lms.js) get unlimited retakes but no look back at an old attempt
-  $("#lastRes").innerHTML=`Your last attempt: <b>${r.total}/${r.max}</b> (${r.pass?"PASS":"NOT YET"}) on ${esc(r.when)}. <a href="#" id="viewLast">View that result</a>. ${LMS.canRetake()?" You can retake the exam; your best score is kept.":""}`;
+  $("#lastRes").innerHTML=`Your last attempt: <b>${r.total}/${r.max}</b> (${r.pass?"PASS":"NOT YET"}) on ${esc(r.when)}. <a href="#" id="viewLast">View that result</a>. ${LMS.canRetake(EXAM_ID)?" You can retake the exam; your best score is kept.":""}`;
   $("#viewLast").onclick=ev=>{ ev.preventDefault(); $("#resPanel").innerHTML=r.html+`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn" id="closeLast">Close</button><a class="btn primary" href="../dashboard.html?day=4" style="text-decoration:none">Back to dashboard</a></div>`; $("#resOv").classList.remove("hidden"); $("#closeLast").onclick=()=>$("#resOv").classList.add("hidden"); };
 })();
 </script>
