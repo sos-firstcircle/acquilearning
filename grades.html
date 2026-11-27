@@ -65,6 +65,8 @@
   .sw input:focus-visible+i{outline:2px solid var(--teal);outline-offset:2px} .sw input:disabled+i{opacity:.5}
   .sw .st{font-size:12px;color:var(--ink-3)} .sw input:checked~.st{color:var(--green);font-weight:600}
   .mtot{font-weight:700}
+  .tipbox{position:fixed;z-index:9999;max-width:320px;background:#0F2A2E;color:#fff;font-size:12.5px;line-height:1.45;padding:8px 11px;border-radius:9px;box-shadow:0 8px 24px rgba(0,0,0,.25);white-space:pre-line;pointer-events:none}
+  [data-tip]{cursor:help;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -209,7 +211,7 @@ async function load(passcode){
    Data: Sim log tab (every try from a sims page: guided demos, practice, sim exams; logged, not graded), plus Progress and Grades for older activity.
    Practice shows the best try; every try is in the log below. */
 const SIMV = "__sims";
-let LASTB = [], SIMDATA = null, SIMTEAM = "";
+let LASTB = [], SIMDATA = null, SIMTEAM = "", SIMQ = "";
 const bfSelect = (batches, sel) => `<select id="bf" aria-label="Batch"><option value="">All batches</option><option value="${SIMV}" ${sel === SIMV ? "selected" : ""}>Simulations (everyone)</option>${batches.map(b=>`<option value="${esc(b)}" ${b===sel?"selected":""}>Batch ${esc(b)}</option>`).join("")}</select>`;
 async function renderSims(){
   const top = `<div class="top"><div><h1>Grades</h1><p class="muted">Simulations: everyone who uses the sims, any batch or none. Practice is logged, not graded.</p></div></div>
@@ -255,31 +257,32 @@ async function renderSims(){
     if (b) return `<span class="pill ${b.p >= 80 ? "pass" : "fail"}" title="Best of ${n} tr${n > 1 ? "ies" : "y"}">${b.p}%</span>${n > 1 ? `<div class="small muted">${n} tries</div>` : ""}`;
     return done(e, it.id) ? '<span class="pill pass" title="Done before tries were logged">Done</span>' : '<span class="pill none">—</span>'; };
   const exCell = (e, it) => { const b = bestEx(e, it.id); return b ? `<span class="pill ${okRow(b) ? "pass" : "fail"}">${b.p != null ? b.p + "%" : "—"}</span>` : '<span class="pill none">—</span>'; };
-  const rowsSum = list.map(e => { const n = lec.filter(it => done(e, it.id)).length, t = lastAt(e);
-    return `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(teamOf(e) || "—")}</td><td>${esc(batchOf(e) || "—")}</td>
-      <td><span class="pill ${n === lec.length ? "pass" : n ? "none" : "none"}" title="${esc(lec.filter(it => !done(e, it.id)).map(it => "Not yet: " + it.label).join("\n") || "All done")}">${n} of ${lec.length}</span></td>
+  const didIt = (e, it) => it.kind === "exam" ? !!bestEx(e, it.id) || done(e, it.id) : done(e, it.id);   // lectures, guided demos, practices and graded sim exams
+  const rowsAll = list.map(e => { const dn = ITEMS.filter(it => didIt(e, it)), n = dn.length, t = lastAt(e);
+    return { e, html: `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(teamOf(e) || "—")}</td><td>${esc(batchOf(e) || "—")}</td>
+      <td>${n ? `<span class="pill pass" data-tip="${esc(dn.map(it => "✓ " + it.label).join("\n"))}">${n} done</span>` : '<span class="pill none">—</span>'}</td>
       ${prac.map(it => `<td>${pracCell(e, it)}</td>`).join("")}${exm.map(it => `<td>${exCell(e, it)}</td>`).join("")}
-      <td class="small muted" style="white-space:nowrap">${t ? esc(when(new Date(t).toISOString())) : "—"}</td></tr>`; });
-  if (!rowsSum.length) rowsSum.push('<tr><td colspan="20" class="muted">Nobody here yet.</td></tr>');
+      <td class="small muted" style="white-space:nowrap">${t ? esc(when(new Date(t).toISOString())) : "—"}</td></tr>` }; });
+  const match = e => { const sq = SIMQ.trim().toLowerCase(); return !sq || (e + " " + nm(e)).toLowerCase().includes(sq); };
   const types = [...new Set(log.map(r => r.Type).filter(Boolean))].sort();
   const logItems = [...new Set(log.map(r => r["Item ID"]))].sort((a, b) => ((byId[a] || {}).label || a).localeCompare((byId[b] || {}).label || b));
   $("app").innerHTML = top + `
-    <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th title="Lectures and guided demos finished at least once">Lectures &amp; guided demos</th>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th title="Lectures, guided demos, practices and graded sim exams done at least once. Hover or tap the number to see which.">Done</th>
       ${prac.map(it => `<th title="${esc(it.label)} (practice: best try, not graded)">${esc(short(it))}</th>`).join("")}${exm.map(it => `<th title="${esc(it.label)} (graded exam: best score)">${esc(short(it))}</th>`).join("")}<th>Last activity</th></tr></thead>
       <tbody id="ssBody"></tbody></table></div><div id="ssPg"></div>
     <h2 class="sec">Every try</h2>
     <p class="muted small" style="margin:-4px 0 10px">One row per try from the sims (Sheet tab "Sim log"), any batch. Practice and guided demos are logged, not graded.</p>
-    <div class="bar" style="margin-top:0"><input id="sq" type="search" placeholder="Search name or email" aria-label="Search">
-      <select id="st" aria-label="Type"><option value="">All types</option>${types.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+    <div class="bar" style="margin-top:0"><select id="st" aria-label="Type"><option value="">All types</option>${types.map(t => `<option>${esc(t)}</option>`).join("")}</select>
       <select id="si" aria-label="Sim"><option value="">All sims</option>${logItems.map(id => `<option value="${esc(id)}">${esc((byId[id] || {}).label || (log.find(r => r["Item ID"] === id) || {}).Item || id)}</option>`).join("")}</select></div>
     <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Person</th><th>Team</th><th>Sim</th><th>Type</th><th>Result</th><th>Score</th></tr></thead><tbody id="slBody"></tbody></table></div><div id="slPg"></div>`;
-  $("tmSlot").innerHTML = `<select id="tm" aria-label="Team"><option value="">All teams</option>${teams.map(t => `<option value="${esc(t)}" ${t === SIMTEAM ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__none" ${SIMTEAM === "__none" ? "selected" : ""}>No team</option></select>`;
+  $("tmSlot").innerHTML = `<select id="tm" aria-label="Team"><option value="">All teams</option>${teams.map(t => `<option value="${esc(t)}" ${t === SIMTEAM ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__none" ${SIMTEAM === "__none" ? "selected" : ""}>No team</option></select> <input id="ssq" type="search" placeholder="Search name or email" aria-label="Search" value="${esc(SIMQ)}">`;
   wire(); $("tm").onchange = e => { SIMTEAM = e.target.value; renderSims(); };
-  const drawSum = () => { const pg = Pager.page("simsum" + SIMTEAM, rowsSum, 10); $("ssBody").innerHTML = pg.rows.join(""); $("ssPg").innerHTML = pg.bar; Pager.wire($("ssPg"), drawSum); };
+  const drawSum = () => { const rowsSum = rowsAll.filter(x => match(x.e)).map(x => x.html); if (!rowsSum.length) rowsSum.push(`<tr><td colspan="20" class="muted">${SIMQ ? "No one matches." : "Nobody here yet."}</td></tr>`);
+    const pg = Pager.page("simsum" + SIMTEAM, rowsSum, 10); $("ssBody").innerHTML = pg.rows.join(""); $("ssPg").innerHTML = pg.bar; Pager.wire($("ssPg"), drawSum); };
   const inList = new Set(list);
   const drawLog = () => {
-    const q = $("sq").value.trim().toLowerCase(), t = $("st").value, id = $("si").value;
-    const rows = log.filter(r => inList.has(r.Email) && (!t || r.Type === t) && (!id || r["Item ID"] === id) && (!q || (r.Email + " " + nm(r.Email)).toLowerCase().includes(q)))
+    const t = $("st").value, id = $("si").value;
+    const rows = log.filter(r => inList.has(r.Email) && (!t || r.Type === t) && (!id || r["Item ID"] === id) && match(r.Email))
       .sort((a, b) => (new Date(b.Timestamp).getTime() || 0) - (new Date(a.Timestamp).getTime() || 0));
     const pg = Pager.page("simlog", rows, 10);
     $("slBody").innerHTML = pg.rows.map(r => { const ok = /^(done|passed|all correct)$/i.test(r.Result);
@@ -288,7 +291,7 @@ async function renderSims(){
         <td><span class="pill ${ok ? "pass" : "fail"}">${ok ? "✓ " : ""}${esc(r.Result)}</span></td><td>${r.p != null ? r.p + "%" : ok ? "100%" : "—"}</td></tr>`; }).join("") || '<tr><td colspan="7" class="muted">No tries logged yet. Tries are logged from now on.</td></tr>';
     $("slPg").innerHTML = pg.bar; Pager.wire($("slPg"), drawLog);
   };
-  $("sq").oninput = drawLog; $("st").onchange = drawLog; $("si").onchange = drawLog;
+  $("ssq").oninput = e => { SIMQ = e.target.value; drawSum(); drawLog(); }; $("st").onchange = drawLog; $("si").onchange = drawLog;
   drawSum(); drawLog();
 }
 
@@ -657,6 +660,14 @@ if (LMS.requireSignIn()) {
   else if (!LMS.isAdmin()) { loadMine(); }
   else { let pc=""; try { pc = sessionStorage.getItem("amhub.adminpc") || ""; } catch(e){} load(pc); }
 }
+/* Hover (or tap) tooltip for [data-tip]: shown outside the table so it isn't cut off by the scroll box. */
+(() => { let box = null; const hide = () => { if (box) { box.remove(); box = null; } };
+  const show = el => { hide(); box = document.createElement("div"); box.className = "tipbox"; box.textContent = el.dataset.tip; document.body.appendChild(box);
+    const r = el.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight;
+    box.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + "px"; box.style.top = (r.bottom + 6 + h > innerHeight ? r.top - h - 6 : r.bottom + 6) + "px"; };
+  document.addEventListener("mouseover", e => { const el = e.target.closest && e.target.closest("[data-tip]"); el ? show(el) : hide(); });
+  document.addEventListener("click", e => { const el = e.target.closest && e.target.closest("[data-tip]"); el ? show(el) : hide(); });
+  addEventListener("scroll", hide, true); })();
 </script>
 </body>
 </html>

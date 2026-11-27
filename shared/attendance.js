@@ -72,7 +72,7 @@
       const nHid = allS.length - sessions.length;
       const addBtn = `<div style="margin:0 0 10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn sm" id="attadd">+ Add a session</button><button class="btn sm" id="attside" aria-expanded="${side}">${side ? "Hide" : "Show"} sessions list (${allS.length}${nHid ? ", " + nHid + " hidden" : ""})</button><span class="small muted">Add: for sessions not on the calendar (trainers only). List: choose which sessions show in this tracker.</span></div><div id="attform"></div>`;
       const sideHtml = !side ? "" : `<aside class="att-side"><h4>Sessions for batch ${esc(ctx.batch)}</h4><div class="small muted" style="margin-bottom:6px">Switch off to hide a session from the attendance tracker only. It still shows on the dashboard and in the lists below.</div>
-        ${allS.map(s => { const on = !hidden(s.id); return `<div class="row ${on ? "" : "off"}"><label class="sw" title="${on ? "Shown" : "Hidden"} in the attendance tracker"><input type="checkbox" data-hide="${esc(s.id)}" ${on ? "checked" : ""}><i></i></label><div><b>${esc(s.title)}</b><div class="src">${esc(new Date(s.when).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))} · ${s.manual ? "Added here" : s.cal ? "Google Calendar" : "Hub list (modules.js)"}</div></div></div>`; }).join("") || '<p class="muted">No sessions.</p>'}</aside>`;
+        ${allS.map(s => { const on = !hidden(s.id); return `<div class="row ${on ? "" : "off"}"><label class="sw" title="${on ? "Shown" : "Hidden"} in the attendance tracker"><input type="checkbox" data-hide="${esc(s.id)}" ${on ? "checked" : ""}><i></i></label><div><b>${esc(s.title)}</b><div class="src">${esc(new Date(s.when).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))} · ${s.manual ? "Added here" : s.cal ? "Google Calendar" : "Hub list (modules.js)"}</div>${s.manual ? `<button class="all" data-del="${esc(s.id)}" title="Delete this session you added (its marks stay in the Sheet)" style="margin-top:4px;color:var(--coral)">Delete</button>` : ""}</div></div>`; }).join("") || '<p class="muted">No sessions.</p>'}</aside>`;
       const wrap = inner => `<div class="att-wrap"><div class="att-main">${inner}</div>${sideHtml}</div>`;
       if (!sessions.length) { el.innerHTML = addBtn + wrap(`<p class="muted">${allS.length ? "Every session is hidden from the tracker (Show sessions list to switch them back on)." : "No sessions for this batch yet."}</p>`); wireAdd(); wireSide(); return; }
       const m = (e, s) => MARKS[e + "|" + s.id] || { status: "", note: "" };
@@ -88,15 +88,18 @@
         const todo = people.filter(e => !m(e, s).status);
         if (!todo.length) { msg("Everyone already has a mark for this session."); return; }
         save(todo.map(e => ({ e, s, status: "present", note: m(e, s).note }))); });
-      el.querySelectorAll("[data-rm]").forEach(b => b.onclick = async () => { const s = sessions[+b.dataset.rm];
-        if (!confirm(`Remove "${s.title}" from the tracker? Its marks stay in the Sheet.`)) return;
-        msg("Removing…"); const r = await post("removeAttSession", { id: s.id });
-        if (r && r.ok) { EXTRA = EXTRA.filter(x => x.id !== s.id); draw(); } else msg("Couldn't remove. Try again."); });
+      el.querySelectorAll("[data-rm]").forEach(b => b.onclick = () => delSession(sessions[+b.dataset.rm]));
       wireAdd(); wireSide();
       el.querySelectorAll("[data-c]").forEach(b => b.onclick = ev => { ev.stopPropagation(); const [pi, si] = b.dataset.c.split("|").map(Number); pop(b, people[pi], sessions[si]); });
     };
+    async function delSession(s) {
+      if (!confirm(`Delete "${s.title}"? Its marks stay in the Sheet.`)) return;
+      msg("Deleting…"); const r = await post("removeAttSession", { id: s.id });
+      if (r && r.ok) { EXTRA = EXTRA.filter(x => x.id !== s.id); draw(); msg("Deleted."); } else msg("Couldn't delete. Try again.");
+    }
     function wireSide() {
       const t = document.getElementById("attside"); if (t) t.onclick = () => { side = !side; draw(); };
+      el.querySelectorAll("[data-del]").forEach(b => b.onclick = () => { const s = EXTRA.find(x => x.id === b.dataset.del); if (s) delSession(s); });
       el.querySelectorAll("[data-hide]").forEach(cb => cb.onchange = async () => { const id = cb.dataset.hide, on = cb.checked;
         cb.disabled = true; msg("Saving…");
         const r = await LMS.setSetting("attHide." + id, on ? "off" : "on").catch(() => null);
