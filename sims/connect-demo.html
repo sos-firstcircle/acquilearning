@@ -2046,12 +2046,14 @@ function showEnd(){
       <table class="res"><thead><tr><th></th><th>Expected</th><th>You saved</th></tr></thead><tbody>${gbad.map(i=>`<tr><td><span class="cross">✗</span> ${i.label}</td><td>${i.expected}</td><td>${i.actual}</td></tr>`).join("")}</tbody></table>
       <div class="ebtns"><button class="btn primary" id="goReplay">Replay the guide</button></div>`;
   } else if(MODE==="guide"){
+    try{ LMS.simLog("d3-demo-"+f.id, { label:f.name, type:"Guided demo", result:"Done" }); }catch(e){}   // Sim log tab (logged, not graded)
     inner=`<h2>Guided run complete 🎉</h2><p>That's <b>${f.name}</b>, with every detail correct. ${f.endNote?f.endNote+" ":""}Now try it yourself, without hints. The task and details stay in the corner.</p>
       <div class="ebtns"><button class="btn primary" id="goTry">Try it myself</button><button class="btn" id="goReplay">Replay the guide</button></div>
       ${f.next?`<div class="ebtns"><button class="btn primary" id="goNext">${f.nextLabel||"Next demo"} →</button></div>`:""}
       ${NOTION[f.id]?`<p class="nt"><a href="${NOTION[f.id]}" target="_blank" rel="noopener">Further reading: Notion ↗</a></p>`:""}`;
   } else {
     const items=f.check(), all=items.every(i=>i.ok);
+    try{ LMS.simLog("d3-demo-"+f.id, { label:f.name+" (try it yourself)", type:"Practice", score:items.filter(i=>i.ok).length, max:items.length||1, passed:all, result:all?"All correct":"With differences", details:items.filter(i=>!i.ok).map(i=>i.label).join("; ") }); }catch(e){}
     inner=`<h2>${all?"Nice work 🎉":"Finished, with a few differences"}</h2><p>You completed <b>${f.name}</b>. Practice only, nothing is graded.</p>
       ${items.length?`<table class="res"><thead><tr><th></th><th>Expected</th><th>You saved</th></tr></thead><tbody>${items.map(i=>`<tr><td>${i.ok?'<span class="check">✓</span>':'<span class="cross">✗</span>'} ${i.label}</td><td>${i.expected}</td><td>${i.actual}</td></tr>`).join("")}</tbody></table>`:""}
       <div class="ebtns"><button class="btn primary" id="goTry">Practice again</button><button class="btn" id="goReplay">Replay the guide</button><a class="btn" href="../dashboard.html?day=3" style="text-decoration:none">Back to dashboard</a>${f.next?`<button class="btn" id="goNext">${f.nextLabel||"Next demo"} →</button>`:""}</div>

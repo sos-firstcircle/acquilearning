@@ -10,6 +10,7 @@
 <script src="modules.js"></script>
 <script src="shared/shell.js"></script>
 <script src="shared/attendance.js"></script>
+<script src="shared/pager.js"></script>
 <style>
   .lead{margin:8px 0 22px;color:var(--ink-2);font-size:15px;max-width:680px}
   .sc{border:1px solid var(--line);border-radius:14px;padding:18px;background:#fff;margin-bottom:16px}
@@ -39,11 +40,12 @@ const when = iso => iso ? new Date(iso).toLocaleString("en-PH",{month:"short",da
 const fmt = s => { const d = new Date(s.when), end = new Date(d.getTime()+(s.minutes||60)*60000), t = x => x.toLocaleTimeString("en-PH",{hour:"numeric",minute:"2-digit"});
   return `${d.toLocaleDateString("en-PH",{weekday:"long",month:"long",day:"numeric"})} · ${t(d)} to ${t(end)}`; };
 
-let noReplies = false, batchSel = "", cal = [], calErr = false, PPL = [], BL = [];   // PPL: People tab (Settings), for onboardees of new batches
+let noReplies = false, batchSel = "", cal = [], calErr = false, PPL = [], BL = [], LOGINS = null;   // PPL: People tab (Settings), for onboardees of new batches
 const TEST_BATCHES = ["000000", "000001"];   // test accounts: left out of "All batches"; pick the batch to see them
 async function load(){
   $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading replies from the Sheet…</p>';
-  const [res, cr, pp] = await Promise.all([LMS.adminRsvps(), LMS.syncCalSessions().then(r => r !== null, () => false), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null]);
+  const [res, cr, pp, lg] = await Promise.all([LMS.adminRsvps(), LMS.syncCalSessions().then(r => r !== null, () => false), LMS.adminPeople ? LMS.adminPeople().catch(() => null) : null, LMS.adminTracking ? LMS.adminTracking(false).catch(() => null) : null]);
+  LOGINS = lg && lg.ok ? lg.logins || [] : null;
   PPL = (pp && pp.ok && pp.people) || []; BL = ((pp && pp.ok && pp.batches) || []).map(b => String(b.batch || "")).filter(Boolean); if (window.Attendance) Attendance.reload();
   cal = LMS.calSessions(); calErr = !cr;
   if (res && res.error === "not-admin") { $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Your email isn\'t an admin.</p>'; return; }
@@ -92,7 +94,9 @@ function render(rows){
   const up = sessions.filter(s => new Date(s.d.getTime() + (s.minutes||60)*60000) >= now), past = sessions.filter(s => !up.includes(s));
   const bar = `<div class="bar" style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="refresh">Refresh</button><label class="small muted">Batch <select id="bsel" style="font:inherit;padding:4px 8px;border:1px solid var(--line);border-radius:8px"><option value="">Pick a batch</option>${allBatches.map(b => `<option value="${esc(b)}" ${b === batchSel ? "selected" : ""}>${esc(b)}</option>`).join("")}</select></label></div>`;
   if (!batchSel) {   // pick a batch first: nothing else shows until then
-    $("app").innerHTML = `<h1>Sessions</h1>${bar}<p class="muted">Pick a batch to see its sessions, replies and attendance.</p>`;
+    $("app").innerHTML = `<h1>Sessions</h1>${bar}<p class="muted" style="margin:-6px 0 4px">Pick a batch to see its attendance, sessions and replies.</p>
+      <h2 class="sec">Login tracker</h2>${loginHelp}<div id="lt"></div>`;
+    loginTracker($("lt"), "");
     $("refresh").onclick = load; $("bsel").onchange = e => { batchSel = e.target.value; render(rows); }; return;
   }
   $("app").innerHTML = `<h1>Sessions</h1>
@@ -101,6 +105,7 @@ function render(rows){
     ${bar}
     <h2 class="sec">Attendance tracker</h2><p class="small muted" style="margin:-6px 0 12px">Only trainers see this. Click a box to mark Present, Absent or On leave and add a note. "All present" marks everyone without a mark yet; change anyone after.</p>
     <div id="att"></div>
+    <h2 class="sec">Login tracker</h2>${loginHelp}<div id="lt"></div>
     <h2 class="sec">Upcoming</h2><p class="small muted" style="margin:-6px 0 12px">Synced from Google Calendar: salesops-calendar events with "Day N" or "Onboarding" in the title. Replies are what each guest answered in Calendar (updates within about 5 minutes).</p>
     ${up.map(card).join("") || '<p class="muted">No upcoming sessions.</p>'}
     <h2 class="sec">Past</h2><p class="small muted" style="margin:-6px 0 12px">Synced from Google Calendar (the last 3 weeks). Older sessions from before the sync show the Yes/No given in the hub.</p>
@@ -112,8 +117,46 @@ function render(rows){
       .filter(e => !adm.includes(e) && (!pr[e] || (pr[e].active && (!pr[e].batch || String(pr[e].batch) === batchSel) && !(pr[e].access || []).some(a => /^admin$/i.test(a)))));
     Attendance.mount($("att"), { batch: batchSel, nameOf, people: ppl, sessions: sessions.filter(s => s.id).map(s => ({ id: s.id, title: s.title, when: s.when, cal: !!s.cal })) });
   }
+  loginTracker($("lt"), batchSel);
   $("refresh").onclick = load;
   $("bsel").onchange = e => { batchSel = e.target.value; render(rows); };
+}
+
+/* Login tracker: sign-ins and first visit of the day (Logins tab), per person. No batch picked = everyone on the People tab (and anyone who signed in), admins left out. */
+const loginHelp = '<p class="small muted" style="margin:-6px 0 12px">From the Sheet\'s Logins tab: each Google sign-in, and each person\'s first visit of the day. Least recently active first. Visits are counted from Nov 27, 2026.</p>';
+function loginTracker(el, batch){
+  if (!el) return;
+  if (!LOGINS) { el.innerHTML = '<p class="muted">Couldn\'t load logins (Code.gs may need redeploying).</p>'; return; }
+  const lc = v => String(v || "").toLowerCase(), R = LMS.roster(), adm = R.admins.map(lc), pr = {};
+  PPL.forEach(p => pr[lc(p.email)] = p);
+  const isAdm = e => adm.includes(e) || ((pr[e] || {}).access || []).some(a => /^admin$/i.test(a));
+  const bOf = e => LMS.batchOf(e) || String((pr[e] || {}).batch || "");
+  const st = {};
+  LOGINS.forEach(([t, e, k, n]) => { if (!e) return; const s = st[e] = st[e] || { sign: 0, act: 0, n: 0, days: new Set(), name: "" }, ms = new Date(t).getTime() || 0;
+    if (n) s.name = n;
+    if (k === "signin") { s.n++; s.sign = Math.max(s.sign, ms); }
+    s.act = Math.max(s.act, ms); s.days.add(new Date(ms).toLocaleDateString("en-CA", { timeZone: "Asia/Manila" })); });
+  let ppl;
+  if (batch) ppl = [...(R.batches[batch] || []), ...PPL.filter(p => String(p.batch) === batch).map(p => p.email)].map(lc).filter(e => !pr[e] || (pr[e].active && (!pr[e].batch || String(pr[e].batch) === batch)));
+  else ppl = [...PPL.filter(p => p.active).map(p => lc(p.email)), ...Object.keys(st)].filter(e => !TEST_BATCHES.includes(bOf(e)) && !(pr[e] && !pr[e].active));
+  ppl = [...new Set(ppl)].filter(e => e && !isAdm(e));
+  const wk = Date.now() - 7 * 864e5, wkDays = e => [...((st[e] || {}).days || [])].filter(d => new Date(d + "T23:59:59+08:00").getTime() >= wk).length;
+  const nm = e => (pr[e] && pr[e].name) || (st[e] && st[e].name) || nameOf(e);
+  ppl.sort((a, b) => ((st[a] || {}).act || 0) - ((st[b] || {}).act || 0) || nm(a).localeCompare(nm(b)));
+  const ago = ms => { if (!ms) return ""; const d = Math.floor((Date.now() - ms) / 864e5); return d <= 0 ? "today" : d === 1 ? "yesterday" : d + " days ago"; };
+  const rows = ppl.map(e => { const s = st[e];
+    return `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc((pr[e] || {}).team || "—")}</td><td>${esc(bOf(e) || "—")}</td>
+      <td>${s && s.sign ? esc(when(new Date(s.sign).toISOString())) : '<span class="pill none">Never</span>'}</td>
+      <td>${s && s.act ? `${esc(when(new Date(s.act).toISOString()))}<div class="small muted">${ago(s.act)}</div>` : '<span class="pill no">Never</span>'}</td>
+      <td>${s ? wkDays(e) : 0}</td><td>${s ? s.days.size : 0}</td></tr>`; });
+  const q = el.dataset.q || "";
+  el.innerHTML = `<div style="margin:0 0 10px"><input id="ltq" type="search" placeholder="Search name or email" value="${esc(q)}" style="font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:240px"></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th>Last Google sign-in</th><th>Last active</th><th title="Days with a visit in the last 7 days">Days active (7d)</th><th>Days active (all)</th></tr></thead><tbody id="ltb"></tbody></table></div><div id="ltp"></div>`;
+  const draw = () => { const qq = $("ltq").value.trim().toLowerCase(); el.dataset.q = qq;
+    const list = rows.filter((r, i) => !qq || (ppl[i] + " " + nm(ppl[i])).toLowerCase().includes(qq));
+    const pg = Pager.page("logins" + batch, list, batch ? Math.max(10, ppl.length) : 10);
+    $("ltb").innerHTML = pg.rows.join("") || '<tr><td colspan="7" class="muted">Nobody here.</td></tr>'; $("ltp").innerHTML = pg.bar; Pager.wire($("ltp"), draw); };
+  $("ltq").oninput = draw; draw();
 }
 
 if (LMS.requireSignIn()) {

@@ -280,7 +280,7 @@
     if (!G || (window.LMS && LMS.preview && LMS.preview())) document.getElementById("exagain").onclick = intro;
     stopTimer();
     if (G) { try { LMS.saveResult(CFG.examId, { score: Math.round(capped * 100) / 100, max: MAXP, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) + " of " + CFG.minutes + ":00" + (timedOut ? " (time ran out)" : "") + (AM_NAME ? " | " + AM_NAME : ""), breakdown: res.map(function(r, i){ return (i + 1) + ". " + fmtPts(r.pts) + " " + (r.how === "skipped" ? "(skipped)" : ""); }).join("\n"), items: JSON.stringify({ rev: res.map(function(r){ return r.subs && r.subs.length ? [r.text, r.pts, r.how, r.mult, r.subs] : [r.text, r.pts, r.how, r.mult]; }) }) }); } catch (err) {} }
-    else try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
+    else try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID, { score: Math.round(capped * 100) / 100, max: MAXP, passed: pass, details: "Time used " + Math.floor(secs / 60) + ":" + ("0" + (secs % 60)).slice(-2) }); } catch (err) {}   /* practice: ticks the Day 5 task, no grade saved */
     /* If this ever becomes graded: LMS.saveResult({ id:"d5-nav-check", label:"Acqui navigation check", score:total, max:TASKS.length, pct:pct, kind:"lms", passing:PASS }) */
     window.ACQUI_EXAM_RESULT = { name: AM_NAME, score: capped, max: MAXP, pct: pct, passed: pass, seconds: secs, tasks: res };
   }

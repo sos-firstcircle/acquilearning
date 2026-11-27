@@ -84,3 +84,11 @@ Static site on GitHub Pages (`sos-firstcircle/acquilearning`), no build step. Pl
 - A person sees the events they're a guest of (invite individual emails, not a Group; guest list must be visible). Admins get all, with guests and batches.
 - Day = by DATE (`calDay_`): batch start (Batches tab Start, else the MMDDYY batch number) = Day 1, one per weekday, holidays still count. Falls back to "Day N" in the title.
 - Replies: only in Google Calendar (Yes/No/Maybe shown on the dashboard and Sessions page). The hub's own Yes/No buttons, note and team-lead tick were removed; old replies stay in the Sessions tab and show on past modules.js sessions. A modules.js session at the same start time as a calendar one is hidden.
+
+## Sim log and login tracker (since Nov 27, 2026)
+- Every finished try on a page under `sims/` goes to the Sheet tab `Sim log` (Timestamp, Email, Name, Batch, Team, Item ID, Item, Type, Result, Score, Max, Percent, Details), any batch or none. `LMS.simLog(id, info)` in lms.js; `LMS.complete(id, tryInfo)` and `LMS.saveResult` call it automatically on sims pages (a demo's last step logs once per page load). Practice passes its score as `tryInfo`. The Connect guided demos call `LMS.simLog("d3-demo-<fn>")` directly (guided run = Guided demo / Done; try-it-yourself = Practice with items right). Logged, not graded; admin preview logs nothing.
+- Logins tab: Google sign-ins (Name "Google sign-in") plus one `Type` = "Active" row on a person's first visit of the day (`logActive_` in myProgress).
+- `adminTracking` action (admins): logins as `[time, email, "signin"|"active", name]`, plus Sim log rows when `sims:true`.
+- Grades page: "Simulations (everyone)" in the batch picker = everyone with sim activity, General access or batch 000002 (admins left out), with a team picker. Summary per person (lectures/guided demos done, practice best try, sim exam best score) and "Every try" from the Sim log. Items come from `existing/sections.js`.
+- Sessions page: Login tracker (no batch picked = everyone on the People tab, admins and test batches left out; a batch = that batch, under Attendance).
+- `shared/pager.js`: compact tables (10/25/50/100/All rows). Grades and Sessions use it; with a batch picked the default page size is the batch size.

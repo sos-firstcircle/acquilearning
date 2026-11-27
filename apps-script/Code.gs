@@ -44,7 +44,7 @@ const CODE_BATCHES = ["000002"];
 const CODES_SHEET = "Codes";
 // One row per sign-in with an access code (not per page load).
 const LOGINS_SHEET = "Logins";
-const LOGINS_HEADER = ["Timestamp", "Name", "Token", "Email"];
+const LOGINS_HEADER = ["Timestamp", "Name", "Token", "Email", "Type"];   // Type: blank = sign-in, "Active" = first visit of the day
 
 // People, teams and batches live in the Sheet (edited from Settings on the site, or by hand). Columns are read by name.
 const PEOPLE_SHEET = "People", TEAMS_SHEET = "Teams", BATCHES_SHEET = "Batches", AUDIT_SHEET = "Audit";
@@ -68,6 +68,9 @@ const SETTINGS_SHEET = "Settings";
 const SETTINGS_HEADER = ["Key", "Value", "Updated", "By"];
 // Yes/No replies to live sessions. One row per reply; the latest row per person + session wins. Shown to trainers on sessions.html.
 const SESSIONS_SHEET = "Sessions";
+// Every sim try (guided demos, lectures, practice, exams) from a sims page, any batch or none: one row per try. Practice is logged, not graded.
+const SIMLOG_SHEET = "Sim log";
+const SIMLOG_HEADER = ["Timestamp", "Email", "Name", "Batch", "Team", "Item ID", "Item", "Type", "Result", "Score", "Max", "Percent", "Details"];
 const SESSIONS_HEADER = ["Timestamp", "Email", "Name", "Batch", "Session ID", "Answer", "Note", "Informed TL"];
 // Attendance (admins only, Sessions page): one row per mark; the latest row per person + session wins. Status: present / tardy / absent / leave / "" (cleared).
 const ATTENDANCE_SHEET = "Attendance";
@@ -145,6 +148,7 @@ function doPost(e) {
       return json_({ ok: true });
     }
     if (req.action === "myProgress") {
+      logActive_(user);   // once a day per person: a "Active" row in Logins (Sessions > Login tracker)
       const done = {};
       readRows_(PROGRESS_SHEET).forEach(function (r) {
         if (String(r.Email).toLowerCase() !== user.email) return;
@@ -291,6 +295,20 @@ function doPost(e) {
           "Session": safe(r.title, 150), "Status": String(r.status || ""), "Note": safe(r.note, 1000), "By": user.email });
       });
       return json_({ ok: true, saved: rows.length });
+    }
+    if (req.action === "simLog") {   // one sim try (lms.js LMS.simLog); never blocks the sim
+      const safe = function (v, n) { return String(v == null ? "" : v).replace(/^[=+\-@]/, "'$&").slice(0, n); };
+      const sc = p.score === "" || p.score == null || isNaN(Number(p.score)) ? "" : Number(p.score), mx = p.max === "" || p.max == null || isNaN(Number(p.max)) ? "" : Number(p.max);
+      const pr = people_()[user.email.replace(/\+[^@]*@/, "@")] || {};
+      appendByHeader_(sheet_(SIMLOG_SHEET, SIMLOG_HEADER), { "Timestamp": new Date(), "Email": user.email, "Name": user.name, "Batch": user.batch ? "'" + user.batch : "", "Team": pr.team || "",
+        "Item ID": safe(p.id, 80), "Item": safe(p.label, 150), "Type": safe(p.type, 30), "Result": safe(p.result, 40), "Score": sc, "Max": mx,
+        "Percent": sc !== "" && mx ? Math.round(sc / mx * 1000) / 10 : "", "Details": safe(p.details, 2000) });
+      return json_({ ok: true });
+    }
+    if (req.action === "adminTracking") {   // Sessions > Login tracker and Grades > Simulations
+      if (!isAdmin_(user.email)) throw new Error("not-admin");
+      const logins = readRows_(LOGINS_SHEET).map(function (r) { return [r.Timestamp, String(r.Email || "").toLowerCase(), r.Type === "Active" ? "active" : "signin", r.Name === "Google sign-in" ? "" : String(r.Name || "")]; });
+      return json_({ ok: true, logins: logins, sims: p.sims ? readRows_(SIMLOG_SHEET) : [] });
     }
     if (req.action === "adminRsvps") {
       if (!isAdmin_(user.email)) throw new Error("not-admin");
@@ -648,6 +666,17 @@ function json_(obj) {
 }
 
 /* ---------- People / Teams / Batches (Settings page) ---------- */
+
+/** First hub visit of the day (Manila time): one "Active" row in Logins. CacheService keeps it to about once a day. */
+function logActive_(user) {
+  try {
+    const day = Utilities.formatDate(new Date(), "Asia/Manila", "yyyy-MM-dd"), key = "act_" + Utilities.base64EncodeWebSafe(user.email + day).slice(0, 200), cache = CacheService.getScriptCache();
+    if (cache.get(key)) return;
+    cache.put(key, "1", 21600);
+    const sh = sheet_(LOGINS_SHEET, LOGINS_HEADER); ensureColumn_(sh, "Type");
+    appendByHeader_(sh, { "Timestamp": new Date(), "Name": user.name, "Token": "", "Email": user.email, "Type": "Active" });
+  } catch (e) {}
+}
 
 /** Every row of the People tab, keyed by email: { email, name, role, team, status, active, access:[...], batch }. Cached 30s. */
 function people_() {

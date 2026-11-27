@@ -77,7 +77,7 @@
       extra.map(function(e){ return '<tr><td class="no">✗</td><td>' + esc(e.l) + '</td><td class="r no">-' + e.loss + '</td></tr>'; }).join("") + '</table>' +
       '<div style="display:flex;justify-content:space-between;align-items:center"><span>' + (window.SLK_STANDALONE ? "" : '<a href="../dashboard.html" style="font-size:13px;color:#1c6a66">Back to Day 5</a> · <a href="' + NEXT.href + '" style="font-size:13px;color:#1c6a66">' + NEXT.label + '</a>') + '</span><button class="gbtn dark" id="again">Try again</button></div></div>';
     $("#again").onclick = function(){ location.reload(); };
-    try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID); } catch (e) {}
+    try { if (window.LMS && LMS.user && LMS.user() && !(LMS.preview && LMS.preview())) LMS.complete(TASK_ID, { score: pts, max: 100, passed: pass, details: "Time " + Math.floor(secs / 60) + "m " + (secs % 60) + "s" }); } catch (e) {}
     window.SLK_RESULT = { name: AM, score: pts, max: 100, passed: pass };
   }
   intro();

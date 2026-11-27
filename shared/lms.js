@@ -59,6 +59,7 @@ window.LMS_CONFIG = {
   }
   function dropPass(){ try { localStorage.removeItem(`${KEY}.gtoken`); } catch(e){} }
   function storedUser(){ return read("user", null); }
+  function onSimPage(){ return /\/sims\//.test(location.pathname); }   // pages under sims/ (demos, practice, sim exams)
   /* Read lazily: roster.js loads just after this file. Returns { admins, learners, batches }. */
   const roster = () => { const r = window.LMS_ROSTER || {}, batches = r.batches || {};
     return { admins: r.admins || [], batches, learners: [].concat(...Object.values(batches)) }; };
@@ -324,12 +325,13 @@ window.LMS_CONFIG = {
     },
 
     /** Mark a lesson as done (no score). */
-    complete(id){
+    complete(id, tryInfo){
       if (isPreview()) return Promise.resolve({ status:"done" });
       const p = LMS.progress(), prev = p[id] || {};
       p[id] = { ...prev, status:"done", updated:Date.now() };
       write(progressKey(), p);
       send("complete", { id });
+      if (onSimPage() && (tryInfo || !(LMS._logged = LMS._logged || {})[id])) { if (!tryInfo) LMS._logged[id] = 1; LMS.simLog(id, tryInfo || {}); }   // every finished demo / practice try goes to the Sim log tab too (a demo's last step: once per page load)
       return Promise.resolve(p[id]);
     },
 
@@ -353,6 +355,7 @@ window.LMS_CONFIG = {
       write(progressKey(), p);
       const honor = LMS.honorRequired() && LMS.honorName ? "Honor code: " + LMS.honorName + (result.details ? " | " : "") : "";
       send("saveResult", { id, score:result.score, max:result.max, passed:!!result.passed, attempt:history.length, details:honor + (result.details || ""), breakdown:result.breakdown || "", notes:result.notes || "", items:result.items || "" });
+      if (onSimPage()) LMS.simLog(id, { type:"Exam", score:result.score, max:result.max, passed:!!result.passed, result:result.passed ? "Passed" : "Not passed" });
       return Promise.resolve(p[id]);
     },
 
@@ -376,6 +379,17 @@ window.LMS_CONFIG = {
         return JSON.stringify(list) !== before;
       }).catch(() => null);
     },
+    /** One try of a sim (guided demo, lecture, practice or exam), any batch or none: a row in the Sheet's "Sim log" tab. Logged, not graded.
+        info: { label, type, result, score, max, passed, details }. Type and result are worked out when left out. Nothing is sent in admin preview. */
+    simLog(id, info){
+      if (isPreview() || C.demo || !C.backendUrl || !currentUser()) return Promise.resolve(null);
+      const i = info || {}, scored = i.score != null && i.max != null && i.max !== "";
+      const type = i.type || (scored ? "Practice" : /demo/i.test(id) ? "Guided demo" : /lecture|tour/i.test(id) ? "Lecture" : "Task");
+      const result = i.result || (scored ? (i.passed ? "Passed" : "Not yet") : "Done");
+      return send("simLog", { id:String(id), label:i.label || String(document.title || "").split("|")[0].trim(), type, result, score:scored ? i.score : "", max:scored ? i.max : "", details:i.details || "" }).catch(() => null);
+    },
+    /** Admin only: sign-ins and first visits of the day (Logins tab) as [time, email, "signin"|"active"]; with sims, every Sim log row too. */
+    adminTracking(sims){ return send("adminTracking", { sims:!!sims }, { retry:true }); },
     /** Admin only: every old hub Yes/No reply (Sessions tab; from before replies moved to Google Calendar). */
     adminRsvps(){ return send("adminRsvps", {}, { retry:true }); },
 

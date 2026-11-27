@@ -11,6 +11,8 @@
 <script src="exams/registry.js"></script>
 <script src="exams/manual-rubrics.js"></script>
 <script src="shared/shell.js"></script>
+<script src="shared/pager.js"></script>
+<script src="existing/sections.js"></script>
 <style>
   .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:18px 0}
   .bar input,.bar select,.gate input{padding:9px 12px;border:1px solid #C9D6D8;border-radius:var(--r);font:inherit;font-size:14px;background:#fff}
@@ -203,6 +205,93 @@ async function load(passcode){
   DATA = res; render();
 }
 
+/* ---------- "Simulations" in the batch picker: everyone with access to the sims, any batch or none ----------
+   Data: Sim log tab (every try from a sims page: guided demos, practice, sim exams; logged, not graded), plus Progress and Grades for older activity.
+   Practice shows the best try; every try is in the log below. */
+const SIMV = "__sims";
+let LASTB = [], SIMDATA = null, SIMTEAM = "";
+const bfSelect = (batches, sel) => `<select id="bf" aria-label="Batch"><option value="">All batches</option><option value="${SIMV}" ${sel === SIMV ? "selected" : ""}>Simulations (everyone)</option>${batches.map(b=>`<option value="${esc(b)}" ${b===sel?"selected":""}>Batch ${esc(b)}</option>`).join("")}</select>`;
+async function renderSims(){
+  const top = `<div class="top"><div><h1>Grades</h1><p class="muted">Simulations: everyone who uses the sims, any batch or none. Practice is logged, not graded.</p></div></div>
+    <div class="bar"><button class="btn sm" id="refresh">Refresh</button>${bfSelect(LASTB, SIMV)}<span id="tmSlot"></span></div>`;
+  const wire = () => { $("bf").onchange = render; $("refresh").onclick = () => { SIMDATA = null; load(sessionStorage.getItem("amhub.adminpc") || "").then(() => { if ($("bf")) { $("bf").value = SIMV; render(); } }); }; };
+  if (!SIMDATA) {
+    $("app").innerHTML = top + '<p class="muted">Loading the Sim log…</p>'; wire();
+    const r = await LMS.adminTracking(true).catch(() => null);
+    if (!r || !r.ok) { $("app").innerHTML = top + '<p class="muted">Couldn\'t load the Sim log. Code.gs may need redeploying.</p>'; wire(); return; }
+    SIMDATA = r;
+    if (!$("bf") || $("bf").value !== SIMV) return;
+  }
+  const lc = v => String(v || "").toLowerCase(), bn = v => (v === "" || v == null) ? "" : String(v).replace(/^'/, "").padStart(6, "0");
+  const R = LMS.roster(), admins = R.admins.map(lc);
+  const PP = {}; (DATA.people || []).forEach(p => PP[lc(p.email)] = p);
+  const isAdm = e => admins.includes(e) || ((PP[e] || {}).access || []).some(a => /^admin$/i.test(a));
+  const ITEMS = (window.LMS_EXISTING || []).flatMap(sec => sec.groups.flatMap(g => g.items.map(it => ({ ...it, sec: sec.title }))));
+  const byId = {}; ITEMS.forEach(it => byId[it.id] = it);
+  const lec = ITEMS.filter(it => it.kind === "lecture"), prac = ITEMS.filter(it => it.kind === "practice"), exm = ITEMS.filter(it => it.kind === "exam");
+  const log = (SIMDATA.sims || []).map(r => ({ ...r, Email: lc(r.Email), Batch: bn(r.Batch), p: r.Percent !== "" && r.Percent != null ? Number(r.Percent) : null }));
+  const live = {}; (DATA.progress || []).forEach(r => { const e = lc(r.Email), id = String(r["Item ID"]), st = live[e] = live[e] || new Set(); id.startsWith("UNDO:") ? st.delete(id.slice(5)) : st.add(id); });
+  const grades = (DATA.grades || []).filter(r => byId[r["Exam ID"]]).map(r => ({ ...r, Email: lc(r.Email), p: pct(r) }));
+  const simIds = new Set(ITEMS.map(it => it.id));
+  const people = [...new Set([
+    ...log.map(r => r.Email), ...grades.map(r => r.Email),
+    ...Object.keys(live).filter(e => [...live[e]].some(id => simIds.has(id))),
+    ...(DATA.people || []).filter(p => p.active && ((p.access || []).some(a => /^general$/i.test(a)) || bn(p.batch) === "000002")).map(p => lc(p.email)),
+    ...(R.batches["000002"] || []).map(lc) ])].filter(e => e && !isAdm(e));
+  const nm = e => (PP[e] && PP[e].name) || (log.find(r => r.Email === e && r.Name) || {}).Name || nameOf(e);
+  const teamOf = e => (PP[e] && PP[e].team) || (log.filter(r => r.Email === e && r.Team).pop() || {}).Team || "";
+  const batchOf = e => LMS.batchOf(e) || bn((PP[e] || {}).batch) || (log.find(r => r.Email === e && r.Batch) || {}).Batch || "";
+  const teams = [...new Set(people.map(teamOf).filter(Boolean))].sort();
+  if (SIMTEAM && SIMTEAM !== "__none" && !teams.includes(SIMTEAM)) SIMTEAM = "";
+  const inTeam = e => !SIMTEAM || (SIMTEAM === "__none" ? !teamOf(e) : teamOf(e) === SIMTEAM);
+  const list = people.filter(inTeam).sort((a, b) => nm(a).localeCompare(nm(b)));
+  const done = (e, id) => (live[e] && live[e].has(id)) || log.some(r => r.Email === e && r["Item ID"] === id);
+  const bestLog = (e, id) => log.filter(r => r.Email === e && r["Item ID"] === id && r.p != null).reduce((a, r) => !a || r.p > a.p ? r : a, null);
+  const bestEx = (e, id) => grades.filter(r => r.Email === e && r["Exam ID"] === id).reduce((a, r) => !a || (r.p != null && r.p > a.p) ? r : a, null);
+  const tries = (e, id) => log.filter(r => r.Email === e && r["Item ID"] === id).length;
+  const lastAt = e => { const t = [...log.filter(r => r.Email === e), ...grades.filter(r => r.Email === e)].map(r => new Date(r.Timestamp).getTime() || 0); return t.length ? Math.max(...t) : 0; };
+  const short = it => it.label.length > 28 ? it.label.slice(0, 26) + "…" : it.label;
+  const pracCell = (e, it) => { const b = bestLog(e, it.id), n = tries(e, it.id);
+    if (b) return `<span class="pill ${b.p >= 80 ? "pass" : "fail"}" title="Best of ${n} tr${n > 1 ? "ies" : "y"}">${b.p}%</span>${n > 1 ? `<div class="small muted">${n} tries</div>` : ""}`;
+    return done(e, it.id) ? '<span class="pill pass" title="Done before tries were logged">Done</span>' : '<span class="pill none">—</span>'; };
+  const exCell = (e, it) => { const b = bestEx(e, it.id); return b ? `<span class="pill ${okRow(b) ? "pass" : "fail"}">${b.p != null ? b.p + "%" : "—"}</span>` : '<span class="pill none">—</span>'; };
+  const rowsSum = list.map(e => { const n = lec.filter(it => done(e, it.id)).length, t = lastAt(e);
+    return `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(teamOf(e) || "—")}</td><td>${esc(batchOf(e) || "—")}</td>
+      <td><span class="pill ${n === lec.length ? "pass" : n ? "none" : "none"}" title="${esc(lec.filter(it => !done(e, it.id)).map(it => "Not yet: " + it.label).join("\n") || "All done")}">${n} of ${lec.length}</span></td>
+      ${prac.map(it => `<td>${pracCell(e, it)}</td>`).join("")}${exm.map(it => `<td>${exCell(e, it)}</td>`).join("")}
+      <td class="small muted" style="white-space:nowrap">${t ? esc(when(new Date(t).toISOString())) : "—"}</td></tr>`; });
+  if (!rowsSum.length) rowsSum.push('<tr><td colspan="20" class="muted">Nobody here yet.</td></tr>');
+  const types = [...new Set(log.map(r => r.Type).filter(Boolean))].sort();
+  const logItems = [...new Set(log.map(r => r["Item ID"]))].sort((a, b) => ((byId[a] || {}).label || a).localeCompare((byId[b] || {}).label || b));
+  $("app").innerHTML = top + `
+    <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th title="Lectures and guided demos finished at least once">Lectures &amp; guided demos</th>
+      ${prac.map(it => `<th title="${esc(it.label)} (practice: best try, not graded)">${esc(short(it))}</th>`).join("")}${exm.map(it => `<th title="${esc(it.label)} (graded exam: best score)">${esc(short(it))}</th>`).join("")}<th>Last activity</th></tr></thead>
+      <tbody id="ssBody"></tbody></table></div><div id="ssPg"></div>
+    <h2 class="sec">Every try</h2>
+    <p class="muted small" style="margin:-4px 0 10px">One row per try from the sims (Sheet tab "Sim log"), any batch. Practice and guided demos are logged, not graded.</p>
+    <div class="bar" style="margin-top:0"><input id="sq" type="search" placeholder="Search name or email" aria-label="Search">
+      <select id="st" aria-label="Type"><option value="">All types</option>${types.map(t => `<option>${esc(t)}</option>`).join("")}</select>
+      <select id="si" aria-label="Sim"><option value="">All sims</option>${logItems.map(id => `<option value="${esc(id)}">${esc((byId[id] || {}).label || (log.find(r => r["Item ID"] === id) || {}).Item || id)}</option>`).join("")}</select></div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Person</th><th>Team</th><th>Sim</th><th>Type</th><th>Result</th><th>Score</th></tr></thead><tbody id="slBody"></tbody></table></div><div id="slPg"></div>`;
+  $("tmSlot").innerHTML = `<select id="tm" aria-label="Team"><option value="">All teams</option>${teams.map(t => `<option value="${esc(t)}" ${t === SIMTEAM ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__none" ${SIMTEAM === "__none" ? "selected" : ""}>No team</option></select>`;
+  wire(); $("tm").onchange = e => { SIMTEAM = e.target.value; renderSims(); };
+  const drawSum = () => { const pg = Pager.page("simsum" + SIMTEAM, rowsSum, 10); $("ssBody").innerHTML = pg.rows.join(""); $("ssPg").innerHTML = pg.bar; Pager.wire($("ssPg"), drawSum); };
+  const inList = new Set(list);
+  const drawLog = () => {
+    const q = $("sq").value.trim().toLowerCase(), t = $("st").value, id = $("si").value;
+    const rows = log.filter(r => inList.has(r.Email) && (!t || r.Type === t) && (!id || r["Item ID"] === id) && (!q || (r.Email + " " + nm(r.Email)).toLowerCase().includes(q)))
+      .sort((a, b) => (new Date(b.Timestamp).getTime() || 0) - (new Date(a.Timestamp).getTime() || 0));
+    const pg = Pager.page("simlog", rows, 10);
+    $("slBody").innerHTML = pg.rows.map(r => { const ok = /^(done|passed|all correct)$/i.test(r.Result);
+      return `<tr><td class="small muted" style="white-space:nowrap">${esc(when(r.Timestamp))}</td><td><b>${esc(nm(r.Email))}</b><div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Team || teamOf(r.Email) || "—")}</td>
+        <td>${esc((byId[r["Item ID"]] || {}).label || r.Item || r["Item ID"])}${r.Details ? `<div class="small muted" style="white-space:pre-line">${esc(String(r.Details).replace(/^'/, ""))}</div>` : ""}</td><td>${esc(r.Type)}</td>
+        <td><span class="pill ${ok ? "pass" : "fail"}">${ok ? "✓ " : ""}${esc(r.Result)}</span></td><td>${r.p != null ? r.p + "%" : ok ? "100%" : "—"}</td></tr>`; }).join("") || '<tr><td colspan="7" class="muted">No tries logged yet. Tries are logged from now on.</td></tr>';
+    $("slPg").innerHTML = pg.bar; Pager.wire($("slPg"), drawLog);
+  };
+  $("sq").oninput = drawLog; $("st").onchange = drawLog; $("si").onchange = drawLog;
+  drawSum(); drawLog();
+}
+
 function render(){
   const bn = v => (v === "" || v == null) ? "" : String(v).padStart(6, "0");   // Sheets may drop leading zeros
   [].concat(DATA.grades || [], DATA.progress || []).forEach(r => { const e = String(r.Email || "").toLowerCase(); if (/\+[^@]*@/.test(e) && r.Name) CODED[e] = String(r.Name); });
@@ -216,6 +305,8 @@ function render(){
   const allLearners = [...new Set([ ...R.learners.map(e=>e.toLowerCase()), ...Object.keys(PB), ...g.map(r=>r.Email) ])].filter(e => !admins.includes(e));
   const batches = [...new Set([ ...Object.keys(R.batches), ...(DATA.batchList || []).map(bn), ...Object.values(PB), ...g.map(r => r.Batch).filter(Boolean) ])].sort();   // roster.js, Batches/People tabs, and any in the Grades tab
   const keepIx = $("ix") ? $("ix").value : "", keepSort = $("isort") ? $("isort").value : "order";
+  if ($("bf") && $("bf").value === SIMV) return renderSims();
+  LASTB = batches;
   const batchSel = $("bf") ? $("bf").value : "", keepQ = $("q") ? $("q").value : "", keepEx = $("ex") ? $("ex").value : "";
   const learners = allLearners.filter(e => !batchSel || bOf(e) === batchSel);
   const exams = [...new Set(g.map(r=>r["Exam ID"]))];
@@ -266,14 +357,15 @@ function render(){
   const sumRows = () => [["Onboardee", "Email", "Batch", ...cols.map(x => x === DEC ? "Decision" : manOf(x) ? manOf(x).title : nice(x) + " (%)"), "Latest Day Progress", "Tasks done"],
     ...learners.map(e => [nameOf(e), e, bOf(e), ...cols.map(x => x === DEC ? decide(e).t : manOf(x) ? mText(mlast[e + "|" + x]) : (best[e+"|"+x] && best[e+"|"+x].p != null ? best[e+"|"+x].p : "")), lastDay(e), (prog[e]||new Set()).size])];
 
+  const sumList = learners.map(e=>`<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(bOf(e)||"—")}</td>${cols.map(x=>`<td>${sumCell(e,x)}</td>`).join("")}<td style="white-space:nowrap">${lastDay(e)}</td><td>${(prog[e]||new Set()).size}</td></tr>`);
+  if (!sumList.length) sumList.push('<tr><td class="muted">No onboardees yet.</td></tr>');
   $("app").innerHTML = `
     <div class="top"><div><h1>Grades</h1><p class="muted">Best score per exam. Pass mark ${MARK}%. Live from the Google Sheet.</p></div>
       <div class="dl">Download <button class="btn sm" id="dlcsv">CSV</button><button class="btn sm" id="dlxlsx">Excel</button></div></div>
     <div class="bar"><button class="btn sm" id="refresh">Refresh</button>
-      <select id="bf" aria-label="Batch"><option value="">All batches</option>${batches.map(b=>`<option value="${esc(b)}" ${b===batchSel?"selected":""}>Batch ${esc(b)}</option>`).join("")}</select></div>
-    <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Batch</th>${cols.map(x=>x===DEC?'<th title="All product exams failed = do not proceed. At least one passed = proceed to Week 2.">Decision</th>':`<th>${esc(nice(x))}</th>`).join("")}<th title="The latest day where they ticked a task or took an exam.">Latest Day Progress</th><th>Tasks done</th></tr></thead><tbody>
-      ${learners.map(e=>`<tr><td><b>${esc(nameOf(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(bOf(e)||"—")}</td>${cols.map(x=>`<td>${sumCell(e,x)}</td>`).join("")}<td style="white-space:nowrap">${lastDay(e)}</td><td>${(prog[e]||new Set()).size}</td></tr>`).join("") || '<tr><td class="muted">No onboardees yet.</td></tr>'}
-    </tbody></table></div>
+      ${bfSelect(batches, batchSel)}</div>
+    <div class="scroll"><table class="tbl"><thead><tr><th>Onboardee</th><th>Batch</th>${cols.map(x=>x===DEC?'<th title="All product exams failed = do not proceed. At least one passed = proceed to Week 2.">Decision</th>':`<th>${esc(nice(x))}</th>`).join("")}<th title="The latest day where they ticked a task or took an exam.">Latest Day Progress</th><th>Tasks done</th></tr></thead><tbody id="sumBody"></tbody></table></div><div id="sumPg"></div>
+
 
     <h2 class="sec">Manual grading</h2>
     <p class="muted small" style="margin:0 0 10px">Trainer-graded requirements, like the 1:1 call simulations. Saved to the Sheet's Manual tab. Admins see all. An AM sees their own in My grades only when the Visible to AMs switch for their batch is on (green). To see the switch, pick a batch at the top. Saving again keeps the old version and shows the newest.</p>
@@ -295,14 +387,19 @@ function render(){
     <div class="bar"><input id="q" type="search" placeholder="Search name or email" aria-label="Search"><select id="ex" aria-label="Exam"><option value="">All exams</option>${exams.map(x=>`<option value="${esc(x)}">${esc(nice(x))}</option>`).join("")}</select>
       ${batchSel ? '<button class="btn sm" id="fixnotes" title="Rewrites the Details (notes) cell of this batch in the Grades tab so the mistakes follow the exam order. Scores are not changed.">Update notes in Sheet</button><span class="small muted" id="fixmsg"></span>' : ""}</div>
     <p class="muted small" style="margin:-8px 0 10px">Notes list the mistakes by item number in exam order (the same Q numbers as Per question above).</p>
-    <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Onboardee</th><th>Batch</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></div>`;
+    <div class="scroll"><table class="tbl"><thead><tr><th>When</th><th>Onboardee</th><th>Batch</th><th>Exam</th><th>Attempt</th><th>Score</th><th>Result</th><th>Notes</th></tr></thead><tbody id="rows"></tbody></table></div><div id="rowsPg"></div>`;
+  const pgDef = batchSel ? Math.max(10, learners.length) : 10;   // no batch: 10 rows; a batch: the whole batch on one page
+  const drawSum = () => { const pg = Pager.page("sum", sumList, pgDef); $("sumBody").innerHTML = pg.rows.join(""); $("sumPg").innerHTML = pg.bar; Pager.wire($("sumPg"), drawSum); };
+  drawSum();
 
   const banks = {}, fullNote = r => { const n = noteOf(r, banks[r["Exam ID"]]); return n == null ? String(r.Details || "") : honorPre(r.Details) + n; };
   const draw = () => {
     const q = $("q").value.trim().toLowerCase(), x = $("ex").value;
     const bsel = $("bf").value;
     const rows = gAll.filter(r => (!bsel || (r.Batch || bOf(r.Email)) === bsel) && (!x || r["Exam ID"]===x) && (!q || (r.Email+" "+(r.Name||"")).toLowerCase().includes(q))).sort((a,b)=>String(b.Timestamp).localeCompare(String(a.Timestamp)));
-    $("rows").innerHTML = rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}${preReset(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An admin reset this exam after this attempt, so it no longer counts">Before reset · not counted</span></div>' : ""}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    const pg = Pager.page("rows", rows, pgDef);
+    $("rows").innerHTML = pg.rows.map(r=>`<tr><td>${esc(when(r.Timestamp))}</td><td>${esc(r.Name||nameOf(r.Email))}<div class="small muted">${esc(r.Email)}</div></td><td>${esc(r.Batch||bOf(r.Email)||"—")}</td><td>${esc(nice(r["Exam ID"]))}</td><td>${esc(r.Attempt)}</td><td>${esc(r.Score)}/${esc(r.Max)} ${r.p!=null?`(${r.p}%)`:""}</td><td>${pill(r)}${preReset(r) ? '<div class="small" style="margin-top:4px"><span class="pill none" title="An admin reset this exam after this attempt, so it no longer counts">Before reset · not counted</span></div>' : ""}</td><td class="small muted" style="white-space:pre-line;min-width:260px">${esc(fullNote(r))}</td></tr>`).join("") || '<tr><td colspan="8" class="muted">No attempts yet.</td></tr>';
+    $("rowsPg").innerHTML = pg.bar; Pager.wire($("rowsPg"), draw);
   };
   $("q").value = keepQ; if ([...$("ex").options].some(o => o.value === keepEx)) $("ex").value = keepEx;
   $("q").oninput = draw; $("ex").onchange = draw; draw();
