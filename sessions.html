@@ -122,8 +122,18 @@ function render(rows){
   $("bsel").onchange = e => { batchSel = e.target.value; render(rows); };
 }
 
+/* Team Leads: only the Login tracker, for the people in the teams they lead (teamSims with logins in Code.gs). */
+async function loadTeam(){
+  $("app").innerHTML = '<h1>Sessions</h1><p class="muted">Loading your team\'s logins…</p>';
+  const r = await LMS.teamSims(true).catch(() => null);
+  LOGINS = r && r.ok ? r.logins || [] : null; PPL = (r && r.ok && r.people) || [];
+  $("app").innerHTML = `<h1>Sessions</h1><div class="bar" style="display:flex;gap:10px;align-items:center"><button class="btn sm" id="refresh">Refresh</button>${r && r.ok && (r.teams || []).length ? `<span class="small muted">Your team${r.teams.length > 1 ? "s" : ""}: ${esc(r.teams.join(", "))}</span>` : ""}</div>
+    <h2 class="sec">Login tracker</h2>${loginHelp}<div id="lt"></div>`;
+  loginTracker($("lt"), ""); $("refresh").onclick = loadTeam;
+}
+
 /* Login tracker: sign-ins and first visit of the day (Logins tab), per person. No batch picked = everyone on the People tab (and anyone who signed in), admins left out. */
-const loginHelp = '<p class="small muted" style="margin:-6px 0 12px">From the Sheet\'s Logins tab: each Google sign-in, and each person\'s first visit of the day. Least recently active first. Visits are counted from Nov 27, 2026.</p>';
+const loginHelp = '<p class="small muted" style="margin:-6px 0 12px">From the Sheet\'s Logins tab: each Google sign-in, and each person\'s first visit of the day. Sort, filter by team or search above the table. Visits are counted from Nov 27, 2026.</p>';
 function loginTracker(el, batch){
   if (!el) return;
   if (!LOGINS) { el.innerHTML = '<p class="muted">Couldn\'t load logins (Code.gs may need redeploying).</p>'; return; }
@@ -142,7 +152,10 @@ function loginTracker(el, batch){
   ppl = [...new Set(ppl)].filter(e => e && !isAdm(e));
   const wk = Date.now() - 7 * 864e5, wkDays = e => [...((st[e] || {}).days || [])].filter(d => new Date(d + "T23:59:59+08:00").getTime() >= wk).length;
   const nm = e => (pr[e] && pr[e].name) || (st[e] && st[e].name) || nameOf(e);
-  ppl.sort((a, b) => ((st[a] || {}).act || 0) - ((st[b] || {}).act || 0) || nm(a).localeCompare(nm(b)));
+  const tmOf = e => (pr[e] || {}).team || "", teams = [...new Set(ppl.map(tmOf).filter(Boolean))].sort();
+  const sortBy = el.dataset.sort || "new", tmSel = el.dataset.tm || "";   // kept between redraws
+  const act = e => (st[e] || {}).act || 0;
+  ppl.sort(sortBy === "new" ? (a, b) => act(b) - act(a) || nm(a).localeCompare(nm(b)) : sortBy === "name" ? (a, b) => nm(a).localeCompare(nm(b)) : (a, b) => act(a) - act(b) || nm(a).localeCompare(nm(b)));
   const ago = ms => { if (!ms) return ""; const d = Math.floor((Date.now() - ms) / 864e5); return d <= 0 ? "today" : d === 1 ? "yesterday" : d + " days ago"; };
   const rows = ppl.map(e => { const s = st[e];
     return `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc((pr[e] || {}).team || "—")}</td><td>${esc(bOf(e) || "—")}</td>
@@ -150,18 +163,24 @@ function loginTracker(el, batch){
       <td>${s && s.act ? `${esc(when(new Date(s.act).toISOString()))}<div class="small muted">${ago(s.act)}</div>` : '<span class="pill no">Never</span>'}</td>
       <td>${s ? wkDays(e) : 0}</td><td>${s ? s.days.size : 0}</td></tr>`; });
   const q = el.dataset.q || "";
-  el.innerHTML = `<div style="margin:0 0 10px"><input id="ltq" type="search" placeholder="Search name or email" value="${esc(q)}" style="font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:240px"></div>
+  const sel = 'style="font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px"';
+  el.innerHTML = `<div style="margin:0 0 10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="ltq" type="search" placeholder="Search name or email" value="${esc(q)}" style="font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;min-width:240px">
+    <select id="lttm" aria-label="Team" ${sel}><option value="">All teams</option>${teams.map(t => `<option ${t === tmSel ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__none" ${tmSel === "__none" ? "selected" : ""}>No team</option></select>
+    <select id="ltsort" aria-label="Sort" ${sel}><option value="new" ${sortBy === "new" ? "selected" : ""}>Most recently active first</option><option value="old" ${sortBy === "old" ? "selected" : ""}>Least recently active first</option><option value="name" ${sortBy === "name" ? "selected" : ""}>Name A–Z</option></select></div>
     <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th>Last Google sign-in</th><th>Last active</th><th title="Days with a visit in the last 7 days">Days active (7d)</th><th>Days active (all)</th></tr></thead><tbody id="ltb"></tbody></table></div><div id="ltp"></div>`;
   const draw = () => { const qq = $("ltq").value.trim().toLowerCase(); el.dataset.q = qq;
-    const list = rows.filter((r, i) => !qq || (ppl[i] + " " + nm(ppl[i])).toLowerCase().includes(qq));
+    const tm = $("lttm").value; el.dataset.tm = tm;
+    const list = rows.filter((r, i) => (!qq || (ppl[i] + " " + nm(ppl[i])).toLowerCase().includes(qq)) && (!tm || (tm === "__none" ? !tmOf(ppl[i]) : tmOf(ppl[i]) === tm)));
     const pg = Pager.page("logins" + batch, list, batch ? Math.max(10, ppl.length) : 10);
     $("ltb").innerHTML = pg.rows.join("") || '<tr><td colspan="7" class="muted">Nobody here.</td></tr>'; $("ltp").innerHTML = pg.bar; Pager.wire($("ltp"), draw); };
-  $("ltq").oninput = draw; draw();
+  $("ltq").oninput = draw; $("lttm").onchange = draw; $("ltsort").onchange = e => { el.dataset.sort = e.target.value; loginTracker(el, batch); };
+  draw();
 }
 
 if (LMS.requireSignIn()) {
   renderSide("sessions");
-  if (!LMS.isAdmin()) $("app").innerHTML = '<h1>Sessions</h1><p class="muted">This page is for trainers.</p>';
+  if (!LMS.isAdmin() && LMS.isTeamLead && LMS.isTeamLead() && LMS.config.backendUrl) loadTeam();   // Team Leads: Login tracker for their team only
+  else if (!LMS.isAdmin()) $("app").innerHTML = '<h1>Sessions</h1><p class="muted">This page is for trainers.</p>';
   else if (!LMS.config.backendUrl) $("app").innerHTML = '<h1>Sessions</h1><p class="muted">The Google Sheet isn\'t connected yet (backendUrl in shared/lms.js).</p>';
   else load();
 }
