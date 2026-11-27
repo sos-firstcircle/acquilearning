@@ -211,7 +211,7 @@ async function load(passcode){
    Data: Sim log tab (every try from a sims page: guided demos, practice, sim exams; logged, not graded), plus Progress and Grades for older activity.
    Practice shows the best try; every try is in the log below. */
 const SIMV = "__sims";
-let LASTB = [], SIMDATA = null, SIMTEAM = "", SIMQ = "";
+let LASTB = [], SIMDATA = null, SIMTEAM = "", SIMQ = "", SIMSHOWHID = false;
 const bfSelect = (batches, sel) => `<select id="bf" aria-label="Batch"><option value="">All batches</option><option value="${SIMV}" ${sel === SIMV ? "selected" : ""}>Simulations (everyone)</option>${batches.map(b=>`<option value="${esc(b)}" ${b===sel?"selected":""}>Batch ${esc(b)}</option>`).join("")}</select>`;
 async function renderSims(){
   const top = `<div class="top"><div><h1>Grades</h1><p class="muted">Simulations: everyone who uses the sims, any batch or none. Practice is logged, not graded.</p></div></div>
@@ -221,7 +221,7 @@ async function renderSims(){
     $("app").innerHTML = top + '<p class="muted">Loading the Sim log…</p>'; wire();
     const r = await LMS.adminTracking(true).catch(() => null);
     if (!r || !r.ok) { $("app").innerHTML = top + '<p class="muted">Couldn\'t load the Sim log. Code.gs may need redeploying.</p>'; wire(); return; }
-    SIMDATA = r;
+    SIMDATA = r; await LMS.loadSettings().catch(() => {});
     if (!$("bf") || $("bf").value !== SIMV) return;
   }
   const lc = v => String(v || "").toLowerCase(), bn = v => (v === "" || v == null) ? "" : String(v).replace(/^'/, "").padStart(6, "0");
@@ -246,7 +246,9 @@ async function renderSims(){
   const teams = [...new Set(people.map(teamOf).filter(Boolean))].sort();
   if (SIMTEAM && SIMTEAM !== "__none" && !teams.includes(SIMTEAM)) SIMTEAM = "";
   const inTeam = e => !SIMTEAM || (SIMTEAM === "__none" ? !teamOf(e) : teamOf(e) === SIMTEAM);
-  const list = people.filter(inTeam).sort((a, b) => nm(a).localeCompare(nm(b)));
+  const hid = e => LMS.setting("simHide." + e, "") === "on";   // hidden from this view by an admin (Settings simHide.<email>)
+  const nHid = people.filter(hid).length;
+  const list = people.filter(inTeam).filter(e => SIMSHOWHID || !hid(e)).sort((a, b) => nm(a).localeCompare(nm(b)));
   const done = (e, id) => (live[e] && live[e].has(id)) || log.some(r => r.Email === e && r["Item ID"] === id);
   const bestLog = (e, id) => log.filter(r => r.Email === e && r["Item ID"] === id && r.p != null).reduce((a, r) => !a || r.p > a.p ? r : a, null);
   const bestEx = (e, id) => grades.filter(r => r.Email === e && r["Exam ID"] === id).reduce((a, r) => !a || (r.p != null && r.p > a.p) ? r : a, null);
@@ -258,18 +260,20 @@ async function renderSims(){
     return done(e, it.id) ? '<span class="pill pass" title="Done before tries were logged">Done</span>' : '<span class="pill none">—</span>'; };
   const exCell = (e, it) => { const b = bestEx(e, it.id); return b ? `<span class="pill ${okRow(b) ? "pass" : "fail"}">${b.p != null ? b.p + "%" : "—"}</span>` : '<span class="pill none">—</span>'; };
   const didIt = (e, it) => it.kind === "exam" ? !!bestEx(e, it.id) || done(e, it.id) : done(e, it.id);   // lectures, guided demos, practices and graded sim exams
+  const KIND_SHORT = { lecture:"Guided demo", practice:"Practice", exam:"Sim exam" }, KIND_TXT = { lecture:"Guided demo: done or not", practice:"Practice: best try (not graded)", exam:"Graded sim exam: best score" };
+  const itemCell = (e, it) => it.kind === "practice" ? pracCell(e, it) : it.kind === "exam" ? exCell(e, it) : done(e, it.id) ? '<span class="pill pass">✓</span>' : '<span class="pill none">—</span>';
   const rowsAll = list.map(e => { const dn = ITEMS.filter(it => didIt(e, it)), n = dn.length, t = lastAt(e);
-    return { e, html: `<tr><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div></td><td>${esc(teamOf(e) || "—")}</td><td>${esc(batchOf(e) || "—")}</td>
+    return { e, html: `<tr${hid(e) ? ' style="opacity:.55"' : ""}><td><b>${esc(nm(e))}</b><div class="small muted">${esc(e)}</div><button data-shide="${esc(e)}" style="display:block;margin-top:3px;padding:0;border:0;background:none;font:inherit;font-size:12px;color:var(--ink-3);text-decoration:underline;cursor:pointer">${hid(e) ? "Unhide" : "Hide from this list"}</button></td><td>${esc(teamOf(e) || "—")}</td><td>${esc(batchOf(e) || "—")}</td>
       <td>${n ? `<span class="pill pass" data-tip="${esc(dn.map(it => "✓ " + it.label).join("\n"))}">${n} done</span>` : '<span class="pill none">—</span>'}</td>
-      ${prac.map(it => `<td>${pracCell(e, it)}</td>`).join("")}${exm.map(it => `<td>${exCell(e, it)}</td>`).join("")}
+      ${ITEMS.map(it => `<td>${itemCell(e, it)}</td>`).join("")}
       <td class="small muted" style="white-space:nowrap">${t ? esc(when(new Date(t).toISOString())) : "—"}</td></tr>` }; });
   const match = e => { const sq = SIMQ.trim().toLowerCase(); return !sq || (e + " " + nm(e)).toLowerCase().includes(sq); };
   const types = [...new Set(log.map(r => r.Type).filter(Boolean))].sort();
   const logItems = [...new Set(log.map(r => r["Item ID"]))].sort((a, b) => ((byId[a] || {}).label || a).localeCompare((byId[b] || {}).label || b));
   $("app").innerHTML = top + `
     <div class="scroll"><table class="tbl"><thead><tr><th>Person</th><th>Team</th><th>Batch</th><th title="Lectures, guided demos, practices and graded sim exams done at least once. Hover or tap the number to see which.">Done</th>
-      ${prac.map(it => `<th title="${esc(it.label)} (practice: best try, not graded)">${esc(short(it))}</th>`).join("")}${exm.map(it => `<th title="${esc(it.label)} (graded exam: best score)">${esc(short(it))}</th>`).join("")}<th>Last activity</th></tr></thead>
-      <tbody id="ssBody"></tbody></table></div><div id="ssPg"></div>
+      ${ITEMS.map(it => `<th data-tip="${esc(it.sec + ": " + it.label + "\n" + KIND_TXT[it.kind])}" style="min-width:92px"><div class="small muted" style="font-weight:600">${esc(KIND_SHORT[it.kind])}</div>${esc(short(it))}</th>`).join("")}<th>Last activity</th></tr></thead>
+      <tbody id="ssBody"></tbody></table></div><div id="ssPg"></div>${nHid ? `<p class="small muted" style="margin:6px 0 0">${nHid} hidden from this list · <a href="#" id="ssHid">${SIMSHOWHID ? "Hide them again" : "Show them"}</a></p>` : ""}
     <h2 class="sec">Every try</h2>
     <p class="muted small" style="margin:-4px 0 10px">One row per try from the sims (Sheet tab "Sim log"), any batch. Practice and guided demos are logged, not graded.</p>
     <div class="bar" style="margin-top:0"><select id="st" aria-label="Type"><option value="">All types</option>${types.map(t => `<option>${esc(t)}</option>`).join("")}</select>
@@ -278,7 +282,12 @@ async function renderSims(){
   $("tmSlot").innerHTML = `<select id="tm" aria-label="Team"><option value="">All teams</option>${teams.map(t => `<option value="${esc(t)}" ${t === SIMTEAM ? "selected" : ""}>${esc(t)}</option>`).join("")}<option value="__none" ${SIMTEAM === "__none" ? "selected" : ""}>No team</option></select> <input id="ssq" type="search" placeholder="Search name or email" aria-label="Search" value="${esc(SIMQ)}">`;
   wire(); $("tm").onchange = e => { SIMTEAM = e.target.value; renderSims(); };
   const drawSum = () => { const rowsSum = rowsAll.filter(x => match(x.e)).map(x => x.html); if (!rowsSum.length) rowsSum.push(`<tr><td colspan="20" class="muted">${SIMQ ? "No one matches." : "Nobody here yet."}</td></tr>`);
-    const pg = Pager.page("simsum" + SIMTEAM, rowsSum, 10); $("ssBody").innerHTML = pg.rows.join(""); $("ssPg").innerHTML = pg.bar; Pager.wire($("ssPg"), drawSum); };
+    const pg = Pager.page("simsum" + SIMTEAM, rowsSum, 10); $("ssBody").innerHTML = pg.rows.join(""); $("ssPg").innerHTML = pg.bar; Pager.wire($("ssPg"), drawSum);
+    $("ssBody").querySelectorAll("[data-shide]").forEach(b => b.onclick = async () => { const e = b.dataset.shide, on = !hid(e);
+      if (on && !confirm(`Hide ${nm(e)} from the Simulations list? Their tries stay in the Sheet. You can unhide them later.`)) return;
+      b.disabled = true; const r = await LMS.setSetting("simHide." + e, on ? "on" : "").catch(() => null);
+      if (r && r.ok) renderSims(); else { b.disabled = false; alert("Couldn't save. Try again."); } }); };
+  if ($("ssHid")) $("ssHid").onclick = ev => { ev.preventDefault(); SIMSHOWHID = !SIMSHOWHID; renderSims(); };
   const inList = new Set(list);
   const drawLog = () => {
     const t = $("st").value, id = $("si").value;
